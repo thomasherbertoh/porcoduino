@@ -1,7 +1,0 @@
-Expression =
-			| Value
-			| Identifier
-			| Expression Operator Expression
-
-Assignment = Make Identifier Assign Expression End
-
