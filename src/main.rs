@@ -6,7 +6,8 @@ pub mod tokens;
 use lexer::Lexer;
 use parser::Parser;
 use std::{env, fs};
-use tokens::TokenType;
+
+use crate::tokens::TokenType;
 
 fn main() {
     let path = env::args().nth(1).expect("Usage: ./porcoduino [FILE-PATH]");
@@ -24,5 +25,11 @@ fn main() {
         }
     }
 
-    let _parser = Parser::new(&tokens);
+    let parser = Parser::new(&tokens);
+
+    let nodes = parser.parse();
+
+    for node in nodes {
+        println!("node = {:?}", node);
+    }
 }

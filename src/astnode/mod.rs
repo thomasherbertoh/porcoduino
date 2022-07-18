@@ -106,13 +106,10 @@ impl EvalNode for ASTValNode {
 #[derive(Clone, Debug)]
 pub struct ASTIdentifierNode {
     name: String,
-    // should this even store its value?
-    // could just be left in the hashmap...
-    val: Option<Value>,
 }
 
 impl ASTIdentifierNode {
-    pub fn new(name: String, val: Option<Value>) -> Self {
-        Self { name, val }
+    pub fn new(name: String) -> Self {
+        Self { name }
     }
 }

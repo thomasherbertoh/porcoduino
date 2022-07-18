@@ -31,7 +31,7 @@ pub enum MathsOp {
     Division,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Token {
     pub t_type: TokenType,
     pub code_depth: u64,
