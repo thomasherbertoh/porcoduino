@@ -1,2 +1,4 @@
-make hello = "hello!";
+make hello = "hello";
 make a = 'a';
+make b = hello + a;
+make c = b + " world";
