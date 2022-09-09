@@ -19,7 +19,7 @@ impl Parser {
     }
 
     fn astnode_from_token(token: &Token) -> Option<ASTNodes> {
-        return match &token.t_type {
+        match &token.t_type {
             TokenType::Identifier(name) => Some(ASTNodes::ASTIdentifierNode(
                 ASTIdentifierNode::new(name.to_string()),
             )),
@@ -30,7 +30,7 @@ impl Parser {
                 op.clone(),
             ))),
             _ => None,
-        };
+        }
     }
 
     fn build_tree(&self, start: usize, end: usize) -> ASTNodes {
@@ -47,25 +47,45 @@ impl Parser {
             };
         }
 
-        let lhs = Parser::astnode_from_token(&self.token_list[start]);
+        let lhs;
+        let mut op_offset = 1;
 
-        let op = match &self.token_list[start + 1].t_type {
+        // division at lower point of tree as higher precedence
+        // checking operator is division and next operator isn't the end
+        if start + 1 < self.token_list.len()
+            && self.token_list[start + 1].t_type == TokenType::Operator(Operator::Division)
+            && start + 3 < self.token_list.len()
+            && start + 3 <= end
+            && self.token_list[start + 3].t_type != TokenType::End
+        {
+            // need to push division down to leaf of tree
+            lhs = Some(self.build_tree(start, start + 2));
+            op_offset = 3;
+        } else {
+            // no division => evaluate normally
+            lhs = Parser::astnode_from_token(&self.token_list[start]);
+        }
+
+        let op = match &self.token_list[start + op_offset].t_type {
             TokenType::Operator(t) => match t {
                 Operator::Assignment => {
-                    panic!("didn't expect assignment operator at index {}", start + 1)
+                    panic!(
+                        "didn't expect assignment operator at index {}",
+                        start + op_offset
+                    )
                 }
                 _ => t,
             },
             _ => panic!(
                 "expected token at index {} to be an operator, but found {:?}",
-                start + 1,
-                self.token_list[start + 1].wordy
+                start + op_offset,
+                self.token_list[start + op_offset].wordy
             ),
         };
 
         ASTNodes::ASTOpNode(ASTOpNode::new(
             Box::new(lhs),
-            Box::new(Some(self.build_tree(start + 2, end))),
+            Box::new(Some(self.build_tree(start + op_offset + 1, end))),
             op.clone(),
         ))
     }
@@ -84,6 +104,7 @@ impl Parser {
 
             let start_lhs = ind;
             let mut end_lhs = ind;
+            // find end of lhs
             while self.token_list[ind].t_type != TokenType::End
                 && self.token_list[ind].t_type != TokenType::Operator(Operator::Assignment)
             {

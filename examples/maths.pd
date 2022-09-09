@@ -4,5 +4,4 @@ make c = b - 3;
 make d = c / 23;
 make e = c / a;
 make f = 8 / 4 / 2;
-make g = 50 - 60;
-make h = 8 / 4 * 2
+make g = 8 / 4 * 2;

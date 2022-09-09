@@ -35,7 +35,7 @@ fn main() {
 
     /*
     for node in nodes.clone() {
-        println!("node = {:?}", node);
+        println!("node = {:#?}", node);
     }
     */
 
