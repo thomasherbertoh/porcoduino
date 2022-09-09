@@ -149,7 +149,7 @@ impl Lexer {
         }
 
         if depth > 0 {
-            panic!("{depth} unclosed blocks at end of program");
+            panic!("{depth} unclosed block(s) at end of program");
         }
         tokens
     }
