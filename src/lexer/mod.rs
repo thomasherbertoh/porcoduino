@@ -114,7 +114,7 @@ impl Lexer {
                 _ if c.is_alphabetic() => {
                     let mut buff = String::from(c);
                     self.counter += 1;
-                    while self.curr_char().is_alphabetic() {
+                    while self.curr_char().is_alphabetic() || self.curr_char().eq(&'_') {
                         buff.push(self.curr_char());
                         self.counter += 1;
                     }
