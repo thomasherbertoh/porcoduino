@@ -41,7 +41,7 @@ impl Parser {
                         .expect(&format!("error on token {:?}", self.token_list[start]))
                 }
                 _ => panic!(
-                    "didn't expect {:?} at index {}",
+                    "expected `Identifier` or `Value` but found {:?} at index {}",
                     self.token_list[start].wordy, start
                 ),
             };
