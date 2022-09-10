@@ -68,13 +68,34 @@ impl Lexer {
                     self.counter += 1;
                 }
                 '-' => {
-                    tokens.push(Token::new(
-                        TokenType::Operator(Operator::Subtraction),
-                        depth,
-                        Some("subtract".to_string()),
-                        None,
-                    ));
                     self.counter += 1;
+                    // check if negative number or subtraction
+                    if self.curr_char().is_numeric() {
+                        let mut res: i64 = 0;
+                        while self.curr_char().is_numeric() {
+                            res = res
+                                .checked_mul(10)
+                                .expect("Integers can only be up to 64 bits")
+                                .checked_add(self.curr_char().to_digit(10).unwrap() as i64)
+                                .expect("Integers can only be up to 64 bits");
+                            self.counter += 1;
+                        }
+
+                        res *= -1; // res.checked_neg() and res.checked_mul(-1) don't seem to work
+                        tokens.push(Token::new(
+                            TokenType::Value(Value::Integer(res)),
+                            depth,
+                            Some("integer".to_string()),
+                            Some(res),
+                        ));
+                    } else {
+                        tokens.push(Token::new(
+                            TokenType::Operator(Operator::Subtraction),
+                            depth,
+                            Some("subtract".to_string()),
+                            None,
+                        ));
+                    }
                 }
                 '*' => {
                     tokens.push(Token::new(
@@ -126,14 +147,13 @@ impl Lexer {
                     tokens.push(Token::new(token_type, depth, Some(buff), None));
                 }
                 _ if c.is_numeric() => {
-                    // assume unsigned integer :)
                     // maybe use bignum in future?
-                    let mut res: u64 = 0;
+                    let mut res: i64 = 0;
                     while self.curr_char().is_numeric() {
                         res = res
                             .checked_mul(10)
                             .expect("Integers can only be up to 64 bits")
-                            .checked_add(self.curr_char().to_digit(10).unwrap() as u64)
+                            .checked_add(self.curr_char().to_digit(10).unwrap() as i64)
                             .expect("Integers can only be up to 64 bits");
                         self.counter += 1;
                     }

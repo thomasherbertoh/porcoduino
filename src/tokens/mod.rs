@@ -11,7 +11,7 @@ pub enum TokenType {
 pub enum Value {
     String(String),
     Char(char),
-    Integer(u64),
+    Integer(i64),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -36,7 +36,7 @@ pub struct Token {
     pub t_type: TokenType,
     pub code_depth: u64,
     pub wordy: Option<String>,
-    pub numeric: Option<u64>,
+    pub numeric: Option<i64>,
 }
 
 impl Token {
@@ -44,7 +44,7 @@ impl Token {
         t_type: TokenType,
         code_depth: u64,
         wordy: Option<String>,
-        numeric: Option<u64>,
+        numeric: Option<i64>,
     ) -> Self {
         Self {
             t_type,

@@ -5,3 +5,5 @@ make d = c / 23;
 make e = c / a;
 make f = 8 / 4 / 2;
 make g = 8 / 4 * 2;
+make h = -5 + 3;
+make i = 5 + -3;
