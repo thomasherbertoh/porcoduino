@@ -7,3 +7,5 @@ make f = 8 / 4 / 2;
 make g = 8 / 4 * 2;
 make h = -5 + 3;
 make i = 5 + -3;
+make j = 5 + 4 - 6 * 4;
+make k = 5 + 3 * 3 - 6 * 4;

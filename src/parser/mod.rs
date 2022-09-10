@@ -50,19 +50,21 @@ impl Parser {
         let lhs;
         let mut op_offset = 1;
 
-        // division at lower point of tree as higher precedence
-        // checking operator is division and next operator isn't the end
+        // division and multiplication at lower point of tree as higher precedence
+        // checking operator is division/multiplication and next operator isn't the end
         if start + 1 < self.token_list.len()
-            && self.token_list[start + 1].t_type == TokenType::Operator(Operator::Division)
+            && (self.token_list[start + 1].t_type == TokenType::Operator(Operator::Division)
+                || self.token_list[start + 1].t_type
+                    == TokenType::Operator(Operator::Multiplication))
             && start + 3 < self.token_list.len()
             && start + 3 <= end
             && self.token_list[start + 3].t_type != TokenType::End
         {
-            // need to push division down to leaf of tree
+            // need to push division/multiplication down to leaf of tree
             lhs = Some(self.build_tree(start, start + 2));
             op_offset = 3;
         } else {
-            // no division => evaluate normally
+            // no division/multiplication => evaluate normally
             lhs = Parser::astnode_from_token(&self.token_list[start]);
         }
 
