@@ -49,5 +49,11 @@ fn main() {
 
     println!("Execution took {} seconds", start.elapsed().as_secs_f32());
 
-    println!("{:?}", results);
+    let mut output = results.iter().collect::<Vec<_>>();
+
+    output.sort_by(|a, b| a.0.cmp(b.0));
+
+    for variable in output {
+        println!("{} = {:?}", variable.0, variable.1);
+    }
 }
