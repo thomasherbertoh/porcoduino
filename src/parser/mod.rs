@@ -52,7 +52,13 @@ impl Parser {
 
         // division and multiplication at lower point of tree as higher precedence
         // checking operator is division/multiplication and next operator isn't the end
-        if start + 1 < self.token_list.len()
+        // FIXME: could have multiple occurrences of same operator in a row
+        // see example `l` in `maths.pd`
+        if let TokenType::Operator(_) = &self.token_list[start].t_type {
+            // first token is an operator (hopefully unary)
+            lhs = None;
+            op_offset = 0;
+        } else if start + 1 < self.token_list.len()
             && (self.token_list[start + 1].t_type == TokenType::Operator(Operator::Division)
                 || self.token_list[start + 1].t_type
                     == TokenType::Operator(Operator::Multiplication))

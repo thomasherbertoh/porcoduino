@@ -50,15 +50,20 @@ impl ASTOpNode {
 
 impl EvalNode for ASTOpNode {
     fn eval_node(&self, map: &mut HashMap<String, Value>) -> Value {
-        let left_node = match self.node.clone().left.unwrap() {
-            ASTNodes::ASTNode(node) => panic!("eval_node() called on {:?}", node),
-            ASTNodes::ASTOpNode(node) => Some(node.eval_node(map)),
-            ASTNodes::ASTValNode(node) => Some(node.eval_node(map)),
-            ASTNodes::ASTIdentifierNode(ident) => match self.op {
-                Operator::Assignment => None,
-                _ => Some(map.get(&ident.name).unwrap().clone()),
-            },
-        };
+        let left_node;
+        if self.node.clone().left.is_none() {
+            left_node = None;
+        } else {
+            left_node = match self.node.clone().left.unwrap() {
+                ASTNodes::ASTNode(node) => panic!("eval_node() called on {:?}", node),
+                ASTNodes::ASTOpNode(node) => Some(node.eval_node(map)),
+                ASTNodes::ASTValNode(node) => Some(node.eval_node(map)),
+                ASTNodes::ASTIdentifierNode(ident) => match self.op {
+                    Operator::Assignment => None,
+                    _ => Some(map.get(&ident.name).unwrap().clone()),
+                },
+            };
+        }
 
         let right_node = match self.node.clone().right.unwrap() {
             ASTNodes::ASTNode(node) => panic!("eval_node() called on {:?}", node),
@@ -84,18 +89,18 @@ impl EvalNode for ASTOpNode {
         }
 
         match self.op {
-            Operator::Addition => match left_node.unwrap() {
-                Value::String(sl) => match right_node {
+            Operator::Addition => match left_node {
+                Some(Value::String(sl)) => match right_node {
                     Value::String(sr) => Value::String(sl + &sr),
                     Value::Char(cr) => Value::String(sl + &cr.to_string()), // feels dirty
                     Value::Integer(ir) => Value::String(sl + &ir.to_string()), // feels dirty
                 },
-                Value::Char(cl) => match right_node {
+                Some(Value::Char(cl)) => match right_node {
                     Value::String(sr) => Value::String(cl.to_string() + &sr),
                     Value::Char(cr) => Value::String(cl.to_string() + &cr.to_string()),
                     Value::Integer(ir) => Value::String(cl.to_string() + &ir.to_string()),
                 },
-                Value::Integer(il) => match right_node {
+                Some(Value::Integer(il)) => match right_node {
                     Value::String(sr) => Value::String(il.to_string() + &sr),
                     Value::Char(cr) => Value::String(il.to_string() + &cr.to_string()),
                     Value::Integer(ir) => Value::Integer(il.checked_add(ir).expect(&format!(
@@ -103,12 +108,24 @@ impl EvalNode for ASTOpNode {
                         il, ir
                     ))),
                 },
+                None => match right_node {
+                    Value::String(sr) => Value::String(sr),
+                    Value::Char(cr) => Value::Char(cr),
+                    Value::Integer(ir) => Value::Integer(ir),
+                },
             },
-            Operator::Subtraction => match left_node.clone().unwrap() {
-                Value::Integer(il) => match right_node {
+            Operator::Subtraction => match left_node.clone() {
+                Some(Value::Integer(il)) => match right_node {
                     Value::Integer(ir) => Value::Integer(il.checked_sub(ir).expect(&format!(
-                        "porcoduino currently only supports positive integers: `{} - {}`",
+                        "error while performing subtraction: `{} - {}`",
                         il, ir
+                    ))),
+                    _ => panic!("invalid operation {:?} on value {:?}", self.op, right_node),
+                },
+                None => match right_node {
+                    Value::Integer(ir) => Value::Integer(0_i64.checked_sub(ir).expect(&format!(
+                        "error while performing subtraction: {} - {}",
+                        0, ir
                     ))),
                     _ => panic!("invalid operation {:?} on value {:?}", self.op, right_node),
                 },

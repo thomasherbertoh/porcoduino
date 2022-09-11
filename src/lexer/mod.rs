@@ -59,35 +59,53 @@ impl Lexer {
                     self.counter += 1;
                 }
                 '+' => {
-                    tokens.push(Token::new(
-                        TokenType::Operator(Operator::Addition),
-                        depth,
-                        Some("add".to_string()),
-                        None,
-                    ));
+                    if let Some(t) = tokens.last() {
+                        if t.t_type != TokenType::Operator(Operator::Subtraction)
+                            && t.t_type != TokenType::Operator(Operator::Addition)
+                        {
+                            tokens.push(Token::new(
+                                TokenType::Operator(Operator::Addition),
+                                depth,
+                                Some("add".to_string()),
+                                None,
+                            ));
+                        }
+                    } else {
+                        tokens.push(Token::new(
+                            TokenType::Operator(Operator::Addition),
+                            depth,
+                            Some("add".to_string()),
+                            None,
+                        ));
+                    }
                     self.counter += 1;
                 }
                 '-' => {
-                    self.counter += 1;
-                    // check if negative number or subtraction
-                    if self.curr_char().is_numeric() {
-                        let mut res: i64 = 0;
-                        while self.curr_char().is_numeric() {
-                            res = res
-                                .checked_mul(10)
-                                .expect("Integers can only be up to 64 bits")
-                                .checked_add(self.curr_char().to_digit(10).unwrap() as i64)
-                                .expect("Integers can only be up to 64 bits");
-                            self.counter += 1;
+                    if let Some(t) = tokens.last() {
+                        if t.t_type == TokenType::Operator(Operator::Subtraction) {
+                            tokens.pop();
+                            tokens.push(Token::new(
+                                TokenType::Operator(Operator::Addition),
+                                depth,
+                                Some("add".to_string()),
+                                None,
+                            ));
+                        } else if t.t_type == TokenType::Operator(Operator::Addition) {
+                            tokens.pop();
+                            tokens.push(Token::new(
+                                TokenType::Operator(Operator::Subtraction),
+                                depth,
+                                Some("subtract".to_string()),
+                                None,
+                            ));
+                        } else {
+                            tokens.push(Token::new(
+                                TokenType::Operator(Operator::Subtraction),
+                                depth,
+                                Some("subtract".to_string()),
+                                None,
+                            ));
                         }
-
-                        res *= -1; // res.checked_neg() and res.checked_mul(-1) don't seem to work
-                        tokens.push(Token::new(
-                            TokenType::Value(Value::Integer(res)),
-                            depth,
-                            Some("integer".to_string()),
-                            Some(res),
-                        ));
                     } else {
                         tokens.push(Token::new(
                             TokenType::Operator(Operator::Subtraction),
@@ -96,6 +114,7 @@ impl Lexer {
                             None,
                         ));
                     }
+                    self.counter += 1;
                 }
                 '*' => {
                     tokens.push(Token::new(
