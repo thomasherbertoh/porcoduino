@@ -15,7 +15,7 @@ fn main() {
     let path = env::args().nth(1).expect("Usage: ./porcoduino [FILE-PATH]");
 
     let program = fs::read_to_string(path.clone())
-        .expect(&format!("Unable to read the file at path '{path}'"));
+        .unwrap_or_else(|_| panic!("Unable to read the file at path '{path}'"));
 
     let mut lexer = Lexer::new(program);
     let tokens = lexer.lex();

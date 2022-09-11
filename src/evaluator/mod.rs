@@ -11,7 +11,7 @@ pub struct Evaluator {
 }
 
 impl Evaluator {
-    pub fn new(nodes: &Vec<ASTNodes>) -> Self {
+    pub fn new(nodes: &[ASTNodes]) -> Self {
         Self {
             nodes: nodes.to_vec(),
             map: HashMap::new(),

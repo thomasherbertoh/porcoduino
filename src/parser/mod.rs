@@ -11,7 +11,7 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(t_list: &Vec<Token>) -> Self {
+    pub fn new(t_list: &[Token]) -> Self {
         Self {
             token_list: t_list.to_vec(),
             map: HashMap::new(),
@@ -38,7 +38,7 @@ impl Parser {
             return match &self.token_list[start].t_type {
                 TokenType::Identifier(_) | TokenType::Value(_) => {
                     Parser::astnode_from_token(&self.token_list[start])
-                        .expect(&format!("error on token {:?}", self.token_list[start]))
+                        .unwrap_or_else(|| panic!("error on token {:?}", self.token_list[start]))
                 }
                 _ => panic!(
                     "expected `Identifier` or `Value` but found {:?} at index {}",
