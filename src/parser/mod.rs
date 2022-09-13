@@ -41,8 +41,8 @@ impl Parser {
                         .unwrap_or_else(|| panic!("error on token {:?}", self.token_list[start]))
                 }
                 _ => panic!(
-                    "expected `Identifier` or `Value` but found {:?} at index {}",
-                    self.token_list[start].wordy, start
+                    "[PARSE] Expected `Identifier` or `Value`. Found `{:?}`",
+                    self.token_list[start].wordy
                 ),
             };
         }
@@ -95,11 +95,16 @@ impl Parser {
                             offset += 2;
                         }
                         Operator::Assignment => {
-                            panic!("Unexpected token {:?}", self.token_list[start + offset])
+                            panic!(
+                                "[PARSE] Expected `Addition`, `Subtraction`, `Multiplication`, or `Division. Found `{:?}`",
+                                self.token_list[start + offset])
                         }
                     },
                     TokenType::End => break,
-                    _ => panic!("Unexpected token {:?}", self.token_list[start + offset]),
+                    _ => panic!(
+                        "[PARSE] Expected `Operator`, `Identifier`, or `Value`. Found `{:?}`",
+                        self.token_list[start + offset]
+                    ),
                 }
             }
 
@@ -110,15 +115,14 @@ impl Parser {
             TokenType::Operator(t) => match t {
                 Operator::Assignment => {
                     panic!(
-                        "didn't expect assignment operator at index {}",
+                        "[PARSE] Unexpected assignment operator at index {}",
                         start + op_offset
                     )
                 }
                 _ => t,
             },
             _ => panic!(
-                "expected token at index {} to be an operator, but found {:?}",
-                start + op_offset,
+                "[PARSE] Expected `Operator`. Found `{:?}`",
                 self.token_list[start + op_offset].wordy
             ),
         };

@@ -171,9 +171,9 @@ impl Lexer {
                     while self.curr_char().is_numeric() {
                         res = res
                             .checked_mul(10)
-                            .expect("Integers can only be up to 64 bits")
+                            .expect("[LEX] Integers can only be up to 64 bits")
                             .checked_add(self.curr_char().to_digit(10).unwrap() as i64)
-                            .expect("Integers can only be up to 64 bits");
+                            .expect("[LEX] Integers can only be up to 64 bits");
                         self.counter += 1;
                     }
                     tokens.push(Token::new(
@@ -188,7 +188,7 @@ impl Lexer {
         }
 
         if depth > 0 {
-            panic!("{depth} unclosed block(s) at end of program");
+            panic!("[LEX] {depth} unclosed block(s) at end of program");
         }
         tokens
     }
