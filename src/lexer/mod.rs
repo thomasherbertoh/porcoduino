@@ -161,6 +161,8 @@ impl Lexer {
 
                     let token_type = match buff.as_str() {
                         "make" => TokenType::Make,
+                        "true" => TokenType::Value(Value::Boolean(true)),
+                        "false" => TokenType::Value(Value::Boolean(false)),
                         _ => TokenType::Identifier(buff.clone()),
                     };
                     tokens.push(Token::new(token_type, depth, Some(buff), None));

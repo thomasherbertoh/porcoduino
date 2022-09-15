@@ -12,6 +12,7 @@ pub enum Value {
     String(String),
     Char(char),
     Integer(i64),
+    Boolean(bool),
 }
 
 #[derive(Clone, Debug, PartialEq)]

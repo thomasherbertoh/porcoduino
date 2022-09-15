@@ -80,11 +80,17 @@ impl EvalNode for ASTOpNode {
                     Value::String(sr) => Value::String(sl + &sr),
                     Value::Char(cr) => Value::String(sl + &cr.to_string()), // feels dirty
                     Value::Integer(ir) => Value::String(sl + &ir.to_string()), // feels dirty
+                    Value::Boolean(br) => {
+                        panic!("[EVAL] Invalid operation: {} {:?} {}", sl, self.op, br)
+                    }
                 },
                 Some(Value::Char(cl)) => match right_node {
                     Value::String(sr) => Value::String(cl.to_string() + &sr),
                     Value::Char(cr) => Value::String(cl.to_string() + &cr.to_string()),
                     Value::Integer(ir) => Value::String(cl.to_string() + &ir.to_string()),
+                    Value::Boolean(br) => {
+                        panic!("[EVAL] Invalid operation: {} {:?} {}", cl, self.op, br)
+                    }
                 },
                 Some(Value::Integer(il)) => match right_node {
                     Value::String(sr) => Value::String(il.to_string() + &sr),
@@ -95,12 +101,20 @@ impl EvalNode for ASTOpNode {
                             il, ir
                         )
                     })),
+                    Value::Boolean(br) => Value::Integer(
+                        il.checked_add(if br { 1 } else { 0 }).unwrap_or_else(|| {
+                            panic!(
+                                "[EVAL] Integers can only be up to 64 bits: `{} + {}`",
+                                il, br
+                            )
+                        }),
+                    ),
                 },
-                None => match right_node {
-                    Value::String(sr) => Value::String(sr),
-                    Value::Char(cr) => Value::Char(cr),
-                    Value::Integer(ir) => Value::Integer(ir),
+                Some(Value::Boolean(bl)) => match right_node {
+                    Value::Boolean(br) => Value::Boolean(bl || br),
+                    v => panic!("[EVAL] Invalid operation: {} {:?} {:?}", bl, self.op, v),
                 },
+                None => right_node,
             },
             Operator::Subtraction => match left_node.clone() {
                 Some(Value::Integer(il)) => match right_node {
@@ -110,6 +124,14 @@ impl EvalNode for ASTOpNode {
                             il, ir
                         )
                     })),
+                    Value::Boolean(br) => Value::Integer(
+                        il.checked_sub(if br { 1 } else { 0 }).unwrap_or_else(|| {
+                            panic!(
+                                "[EVAL] Error while performing subtraction: `{} - {}`",
+                                il, br
+                            )
+                        }),
+                    ),
                     _ => panic!(
                         "[EVAL] Invalid operation `{:?}` on value `{:?}`",
                         self.op, right_node
@@ -138,6 +160,7 @@ impl EvalNode for ASTOpNode {
             Operator::Multiplication => match left_node.unwrap() {
                 Value::String(sl) => match right_node {
                     Value::Integer(ir) => Value::String(sl.repeat(ir as usize)),
+                    Value::Boolean(br) => Value::String(sl.repeat(if br { 1 } else { 0 })),
                     _ => panic!(
                         "[EVAL] Invalid operation `{:?}` on value `{:?}`",
                         self.op, right_node
@@ -145,6 +168,13 @@ impl EvalNode for ASTOpNode {
                 },
                 Value::Char(cl) => match right_node {
                     Value::Integer(ir) => Value::String(cl.to_string().repeat(ir as usize)),
+                    Value::Boolean(br) => {
+                        if br {
+                            Value::Char(cl)
+                        } else {
+                            Value::Char('\0')
+                        }
+                    }
                     _ => panic!(
                         "[EVAL] Invalid operation `{:?}` on value `{:?}`",
                         self.op, right_node
@@ -159,6 +189,33 @@ impl EvalNode for ASTOpNode {
                             il, ir
                         )
                     })),
+                    Value::Boolean(br) => Value::Integer(
+                        il.checked_mul(if br { 1 } else { 0 }).unwrap_or_else(|| {
+                            panic!(
+                                "[EVAL] Integers can only be up to 64 bits: `{} + {}`",
+                                il, br
+                            )
+                        }),
+                    ),
+                },
+                Value::Boolean(bl) => match right_node {
+                    Value::String(sr) => Value::String(sr.repeat(if bl { 1 } else { 0 })),
+                    Value::Char(cr) => {
+                        if bl {
+                            Value::Char(cr)
+                        } else {
+                            Value::Char('\0')
+                        }
+                    }
+                    Value::Integer(ir) => Value::Integer(
+                        ir.checked_mul(if bl { 1 } else { 0 }).unwrap_or_else(|| {
+                            panic!(
+                                "[EVAL] Integers can only be up to 64 bits: `{} * {}`",
+                                bl, ir
+                            )
+                        }),
+                    ),
+                    Value::Boolean(br) => Value::Boolean(bl && br),
                 },
             },
             Operator::Division => match left_node.clone().unwrap() {
@@ -166,6 +223,11 @@ impl EvalNode for ASTOpNode {
                     Value::Integer(ir) => Value::Integer(il.checked_div(ir).unwrap_or_else(|| {
                         panic!("[EVAL] Integer division error: `{} / {}`", il, ir)
                     })),
+                    Value::Boolean(br) => {
+                        Value::Integer(il.checked_div(if br { 1 } else { 0 }).unwrap_or_else(
+                            || panic!("[EVAL] Integer division error: `{} / {}`", il, br),
+                        ))
+                    }
                     _ => panic!(
                         "[EVAL] Invalid operation `{:?}` on value `{:?}`",
                         self.op, right_node

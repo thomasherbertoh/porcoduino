@@ -1,0 +1,4 @@
+make a = true;
+make b = false;
+make c = a + b;
+make d = a * b;
