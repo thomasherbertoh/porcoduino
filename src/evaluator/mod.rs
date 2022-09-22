@@ -64,9 +64,7 @@ impl EvalNode for ASTOpNode {
                 map.insert(
                     match self.node.clone().left.unwrap() {
                         ASTNodes::ASTIdentifierNode(ident) => {
-                            if !map.contains_key(&ident.name) {
-                                ident.name
-                            } else if right_node.get_type()
+                            if !map.contains_key(&ident.name) || right_node.get_type()
                                 == *map.get(&ident.name).unwrap().get_type()
                             {
                                 ident.name
@@ -276,7 +274,7 @@ impl EvalNode for ASTOpNode {
                             self.op, right_node
                         )
                     }
-                    Value::Integer(ir) => Value::Boolean(!((if bl { 1 } else { 0 } & ir) % 2 == 0)),
+                    Value::Integer(ir) => Value::Boolean((if bl { 1 } else { 0 } & ir) % 2 != 0),
                     Value::Boolean(br) => Value::Boolean(bl & br),
                 },
             },
@@ -302,7 +300,7 @@ impl EvalNode for ASTOpNode {
                             self.op, right_node
                         )
                     }
-                    Value::Integer(ir) => Value::Boolean(!((if bl { 1 } else { 0 } | ir) % 2 == 0)),
+                    Value::Integer(ir) => Value::Boolean((if bl { 1 } else { 0 } | ir) % 2 != 0),
                     Value::Boolean(br) => Value::Boolean(bl | br),
                 },
             },
