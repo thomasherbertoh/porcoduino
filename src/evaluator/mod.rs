@@ -71,7 +71,7 @@ impl EvalNode for ASTOpNode {
                             {
                                 ident.name
                             } else {
-                                panic!("Invalid operation: assigning value of type `{}`({:?}) to variable of type `{}`({})",
+                                panic!("[EVAL] Invalid operation: assigning value of type `{}`({:?}) to variable of type `{}`({})",
                                     right_node.get_type(),
                                     right_node,
                                     map.get(&ident.name).unwrap().get_type(),
