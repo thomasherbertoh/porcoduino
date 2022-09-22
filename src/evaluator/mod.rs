@@ -63,7 +63,22 @@ impl EvalNode for ASTOpNode {
             if left_node.is_none() {
                 map.insert(
                     match self.node.clone().left.unwrap() {
-                        ASTNodes::ASTIdentifierNode(ident) => ident.name,
+                        ASTNodes::ASTIdentifierNode(ident) => {
+                            if !map.contains_key(&ident.name) {
+                                ident.name
+                            } else if right_node.get_type()
+                                == *map.get(&ident.name).unwrap().get_type()
+                            {
+                                ident.name
+                            } else {
+                                panic!("Invalid operation: assigning value of type `{}`({:?}) to variable of type `{}`({})",
+                                    right_node.get_type(),
+                                    right_node,
+                                    map.get(&ident.name).unwrap().get_type(),
+                                    ident.name
+                                );
+                            }
+                        }
                         _ => panic!("[EVAL] Expected `Identifier`. Found `{:?}`", self.node.left),
                     },
                     right_node.clone(),

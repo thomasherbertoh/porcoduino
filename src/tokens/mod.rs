@@ -15,6 +15,18 @@ pub enum Value {
     Boolean(bool),
 }
 
+impl Value {
+    pub fn get_type(&self) -> String {
+        match self {
+            Value::String(_) => "String",
+            Value::Char(_) => "Char",
+            Value::Integer(_) => "Integer",
+            Value::Boolean(_) => "Boolean",
+        }
+        .to_string()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Operator {
     Addition,
