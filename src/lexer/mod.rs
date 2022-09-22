@@ -143,6 +143,15 @@ impl Lexer {
                     ));
                     self.counter += 1;
                 }
+                '&' => {
+                    tokens.push(Token::new(
+                        TokenType::Operator(Operator::BitwiseAnd),
+                        depth,
+                        Some("bitwise_and".to_string()),
+                        None,
+                    ));
+                    self.counter += 1;
+                }
                 '{' => {
                     depth += 1;
                     self.counter += 1;
@@ -185,7 +194,8 @@ impl Lexer {
                         Some(res),
                     ));
                 }
-                _ => self.counter += 1,
+                _ if c.is_whitespace() => self.counter += 1,
+                _ => panic!("[LEX] Unrecognised symbol: `{}`", c),
             }
         }
 
