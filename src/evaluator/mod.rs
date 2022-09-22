@@ -280,7 +280,32 @@ impl EvalNode for ASTOpNode {
                     Value::Boolean(br) => Value::Boolean(bl & br),
                 },
             },
-
+            Operator::BitwiseOr => match left_node.clone().unwrap() {
+                Value::String(_) | Value::Char(_) => {
+                    panic!(
+                        "[EVAL] Invalid operation `{:?}` on value `{:?}`",
+                        self.op, left_node
+                    )
+                }
+                Value::Integer(il) => match right_node {
+                    Value::String(_) | Value::Char(_) => panic!(
+                        "[EVAL] Invalid operation `{:?}` on value `{:?}`",
+                        self.op, right_node
+                    ),
+                    Value::Integer(ir) => Value::Integer(il | ir),
+                    Value::Boolean(br) => Value::Integer(il | if br { 1 } else { 0 }),
+                },
+                Value::Boolean(bl) => match right_node {
+                    Value::String(_) | Value::Char(_) => {
+                        panic!(
+                            "[EVAL] Invalid operation `{:?}` on value `{:?}`",
+                            self.op, right_node
+                        )
+                    }
+                    Value::Integer(ir) => Value::Boolean(!((if bl { 1 } else { 0 } | ir) % 2 == 0)),
+                    Value::Boolean(br) => Value::Boolean(bl | br),
+                },
+            },
             Operator::Assignment => unreachable!(),
         }
     }

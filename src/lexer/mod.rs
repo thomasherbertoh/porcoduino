@@ -152,6 +152,15 @@ impl Lexer {
                     ));
                     self.counter += 1;
                 }
+                '|' => {
+                    tokens.push(Token::new(
+                        TokenType::Operator(Operator::BitwiseOr),
+                        depth,
+                        Some("bitwise_or".to_string()),
+                        None,
+                    ));
+                    self.counter += 1;
+                }
                 '{' => {
                     depth += 1;
                     self.counter += 1;

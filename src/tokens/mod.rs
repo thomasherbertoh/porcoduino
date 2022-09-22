@@ -34,6 +34,7 @@ pub enum Operator {
     Multiplication,
     Division,
     BitwiseAnd,
+    BitwiseOr,
     Assignment,
 }
 
