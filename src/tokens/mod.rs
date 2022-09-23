@@ -36,6 +36,7 @@ pub enum Operator {
     BitwiseAnd,
     BitwiseOr,
     Equality,
+    Inequality,
     Assignment,
 }
 

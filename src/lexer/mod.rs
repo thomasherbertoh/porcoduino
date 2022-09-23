@@ -171,6 +171,18 @@ impl Lexer {
                     ));
                     self.counter += 1;
                 }
+                '!' => {
+                    self.counter += 1;
+                    if self.curr_char() == '=' {
+                        tokens.push(Token::new(
+                            TokenType::Operator(Operator::Inequality),
+                            depth,
+                            Some("not_equal".to_string()),
+                            None,
+                        ));
+                        self.counter += 1;
+                    }
+                }
                 '{' => {
                     depth += 1;
                     self.counter += 1;
