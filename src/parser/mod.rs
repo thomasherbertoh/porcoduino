@@ -79,7 +79,8 @@ impl Parser {
                         Operator::Addition
                         | Operator::Subtraction
                         | Operator::BitwiseAnd
-                        | Operator::BitwiseOr => {
+                        | Operator::BitwiseOr
+                        | Operator::Equality => {
                             if matches!(
                                 last.t_type,
                                 TokenType::Operator(Operator::Multiplication)

@@ -1,0 +1,17 @@
+make a = true == true;
+make b = false == false;
+make c = true == false;
+make d = false == true;
+make e = 1 == true;
+make f = 1 == 1;
+make g = 1 == 2;
+make h = "hello" == "hello";
+make i = "true" == true;
+make j = "hi" == "hello";
+make k = 'a' == 'b';
+make l = 'a' == 'a';
+make m = "testvar";
+make n = "testvar";
+make o = m == n;
+make p = "testv4r";
+make q = m == p;

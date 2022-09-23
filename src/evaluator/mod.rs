@@ -321,6 +321,13 @@ impl EvalNode for ASTOpNode {
                     Value::Boolean(br) => Value::Boolean(bl | br),
                 },
             },
+            Operator::Equality => {
+                if left_node.clone().unwrap().get_type() != right_node.get_type() {
+                    Value::Boolean(false)
+                } else {
+                    Value::Boolean(left_node.unwrap() == right_node)
+                }
+            }
             Operator::Assignment => unreachable!(),
         }
     }

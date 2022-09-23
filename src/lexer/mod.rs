@@ -23,13 +23,23 @@ impl Lexer {
 
             match c {
                 '=' => {
-                    tokens.push(Token::new(
-                        TokenType::Operator(Operator::Assignment),
-                        depth,
-                        Some("assign".to_string()),
-                        None,
-                    ));
                     self.counter += 1;
+                    if self.curr_char() == '=' {
+                        tokens.push(Token::new(
+                            TokenType::Operator(Operator::Equality),
+                            depth,
+                            Some("equals".to_string()),
+                            None,
+                        ));
+                        self.counter += 1;
+                    } else {
+                        tokens.push(Token::new(
+                            TokenType::Operator(Operator::Assignment),
+                            depth,
+                            Some("assign".to_string()),
+                            None,
+                        ));
+                    }
                 }
                 '\'' => {
                     self.counter += 1;
