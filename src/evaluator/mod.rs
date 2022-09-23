@@ -39,7 +39,16 @@ impl EvalNode for ASTOpNode {
                 ASTNodes::ASTValNode(node) => Some(node.eval_node(map)),
                 ASTNodes::ASTIdentifierNode(ident) => match self.op {
                     Operator::Assignment => None,
-                    _ => Some(map.get(&ident.name).unwrap().clone()),
+                    _ => Some(
+                        map.get(&ident.name)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "[EVAL] Unable to fetch value of identifier `{}`. Has it been declared?",
+                                    ident.name,
+                                )
+                            })
+                            .clone(),
+                    ),
                 },
                 _ => panic!(
                     "[EVAL] eval_node() called on unevaluatable `{:?}`",
@@ -51,7 +60,15 @@ impl EvalNode for ASTOpNode {
         let right_node = match self.node.clone().right.unwrap() {
             ASTNodes::ASTOpNode(node) => node.eval_node(map),
             ASTNodes::ASTValNode(node) => node.eval_node(map),
-            ASTNodes::ASTIdentifierNode(ident) => map.get(&ident.name).unwrap().clone(),
+            ASTNodes::ASTIdentifierNode(ident) => map
+                .get(&ident.name)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "[EVAL] Unable to fetch value of identifier `{}`. Has it been declared?",
+                        ident.name
+                    )
+                })
+                .clone(),
             _ => panic!(
                 "[EVAL] eval_node() called on unevaluatable `{:?}`",
                 self.node.clone().right.unwrap()
