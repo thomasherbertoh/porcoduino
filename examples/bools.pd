@@ -20,3 +20,6 @@ make s = true | true;
 make t = true | false;
 make u = false | true;
 make v = false | false;
+make w = !false & true;
+make x = !true & true;
+make y = !false & !false;

@@ -181,6 +181,13 @@ impl Lexer {
                             None,
                         ));
                         self.counter += 1;
+                    } else {
+                        tokens.push(Token::new(
+                            TokenType::Operator(Operator::Negation),
+                            depth,
+                            Some("negation".to_string()),
+                            None,
+                        ));
                     }
                 }
                 '{' => {

@@ -81,7 +81,8 @@ impl Parser {
                         | Operator::BitwiseAnd
                         | Operator::BitwiseOr
                         | Operator::Equality
-                        | Operator::Inequality => {
+                        | Operator::Inequality
+                        | Operator::Negation => {
                             if matches!(
                                 last.t_type,
                                 TokenType::Operator(Operator::Multiplication)

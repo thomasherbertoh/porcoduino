@@ -335,6 +335,20 @@ impl EvalNode for ASTOpNode {
                     Value::Boolean(left_node.unwrap() != right_node)
                 }
             }
+            Operator::Negation => match left_node.clone() {
+                None => match right_node {
+                    Value::Boolean(br) => Value::Boolean(!br),
+                    _ => panic!(
+                        "[EVAL] Invalid operation `{:?}` on value `{:?}`",
+                        self.op, right_node
+                    ),
+                },
+                _ => panic!(
+                    "[EVAL] Invalid operation `{:?}` on value `{:?}`",
+                    self.op,
+                    left_node.unwrap()
+                ),
+            },
             Operator::Assignment => unreachable!(),
         }
     }
