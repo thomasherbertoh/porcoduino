@@ -41,14 +41,6 @@ pub enum Operator {
     Assignment,
 }
 
-#[derive(Debug)]
-pub enum MathsOp {
-    Addition,
-    Subtraction,
-    Multiplication,
-    Division,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct Token {
     pub t_type: TokenType,
