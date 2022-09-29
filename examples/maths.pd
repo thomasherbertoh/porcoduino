@@ -12,3 +12,6 @@ make k = 5 + 3 * 3 - 6 * 4;
 make l = 16 / 2 / 2 / 2;
 make m = 5 -- 4;
 make n = 16 / 2 * 2 + 2;
+make o = 6 + 4 * 2;
+make p = (6 + 4) * 2;
+make q = 2 * (6 - 4);

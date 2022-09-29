@@ -4,6 +4,8 @@ pub enum TokenType {
     Make,
     Value(Value),
     Operator(Operator),
+    LBracket,
+    RBracket,
     End,
 }
 

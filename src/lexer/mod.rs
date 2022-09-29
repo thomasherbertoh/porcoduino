@@ -198,6 +198,24 @@ impl Lexer {
                     depth -= 1;
                     self.counter += 1;
                 }
+                '(' => {
+                    tokens.push(Token::new(
+                        TokenType::LBracket,
+                        depth,
+                        Some("l_bracket".to_string()),
+                        None,
+                    ));
+                    self.counter += 1;
+                }
+                ')' => {
+                    tokens.push(Token::new(
+                        TokenType::RBracket,
+                        depth,
+                        Some("r_bracket".to_string()),
+                        None,
+                    ));
+                    self.counter += 1;
+                }
                 _ if c.is_alphabetic() => {
                     let mut buff = String::from(c);
                     self.counter += 1;

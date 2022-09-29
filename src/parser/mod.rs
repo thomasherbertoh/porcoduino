@@ -33,6 +33,34 @@ impl Parser {
         }
     }
 
+    fn find_rbracket_index(&self, start: usize, end: usize) -> usize {
+        let mut bracket_count = 0;
+        for i in start..=end {
+            bracket_count += match self.token_list.get(i).unwrap().t_type {
+                TokenType::LBracket => 1,
+                TokenType::RBracket => -1,
+                _ => 0,
+            };
+            if bracket_count == 0 {
+                // found corresponding RBracket at index `i`
+                return i;
+            }
+        }
+        panic!(
+            "[PARSE] Unable to find RBracket in slice {}..={}",
+            start, end
+        );
+    }
+
+    fn build_brackets(&self, start: usize, end: usize) -> ASTNodes {
+        let ind = self.find_rbracket_index(start, end);
+        let rbracket = self.token_list.get(ind).unwrap().clone();
+        if !matches!(rbracket.t_type, TokenType::RBracket) {
+            panic!("[PARSE] Expected ')' but found {:?} instead.", rbracket);
+        }
+        self.build_tree(start + 1, ind - 1)
+    }
+
     fn build_tree(&self, start: usize, end: usize) -> ASTNodes {
         if start == end {
             return match &self.token_list.get(start).unwrap().t_type {
@@ -54,6 +82,15 @@ impl Parser {
             // first token is an operator (hopefully unary)
             lhs = None;
             op_offset = 0;
+        } else if matches!(
+            self.token_list.get(start).unwrap().t_type,
+            TokenType::LBracket
+        ) {
+            // evaluate as lhs
+            lhs = Some(self.build_brackets(start, end));
+
+            // update op_offset
+            op_offset = self.find_rbracket_index(start, end) + 1 - start;
         } else if start + 1 < self.token_list.len()
             && !matches!(
                 self.token_list.get(start + 1).unwrap().t_type,
@@ -98,7 +135,7 @@ impl Parser {
                         }
                         Operator::Multiplication | Operator::Division => {
                             op_offset = offset;
-                            offset += 2;
+                            offset += 1;
                         }
                         Operator::Assignment => {
                             panic!(
@@ -107,6 +144,7 @@ impl Parser {
                         }
                     },
                     TokenType::End => break,
+                    TokenType::LBracket => break,
                     _ => panic!(
                         "[PARSE] Expected `Operator`, `Identifier`, or `Value`. Found `{:?}`",
                         self.token_list[start + offset]
@@ -127,9 +165,10 @@ impl Parser {
                 }
                 _ => t,
             },
+            TokenType::End => return lhs.unwrap(),
             _ => panic!(
                 "[PARSE] Expected `Operator`. Found `{:?}`",
-                self.token_list[start + op_offset].wordy
+                self.token_list[start + op_offset]
             ),
         };
 
