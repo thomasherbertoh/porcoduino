@@ -21,13 +21,14 @@ impl Parser {
     fn astnode_from_token(token: &Token) -> Option<ASTNodes> {
         match &token.t_type {
             TokenType::Identifier(name) => Some(ASTNodes::ASTIdentifierNode(
-                ASTIdentifierNode::new(name.to_string()),
+                ASTIdentifierNode::new(name.to_string(), token.code_depth),
             )),
             TokenType::Value(v) => Some(ASTNodes::ASTValNode(ASTValNode::new(v.clone()))),
             TokenType::Operator(op) => Some(ASTNodes::ASTOpNode(ASTOpNode::new(
                 Box::new(None),
                 Box::new(None),
                 op.clone(),
+                token.code_depth,
             ))),
             _ => None,
         }
@@ -176,6 +177,7 @@ impl Parser {
             Box::new(lhs),
             Box::new(Some(self.build_tree(start + op_offset + 1, end))),
             op.clone(),
+            self.token_list.get(start).unwrap().code_depth,
         ))
     }
 
@@ -226,6 +228,7 @@ impl Parser {
                 Box::new(Some(lhs)),
                 Box::new(Some(rhs)),
                 Operator::Assignment,
+                self.token_list[start_lhs].code_depth,
             )));
         }
 

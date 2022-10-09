@@ -23,7 +23,10 @@ fn main() {
     /*
     for token in tokens.clone() {
         print!("{:?} ", token.t_type);
-        if token.t_type == TokenType::End {
+        if matches!(
+            token.t_type,
+            TokenType::End | TokenType::StartBlock | TokenType::EndBlock
+        ) {
             print!("\n");
         }
     }
@@ -45,15 +48,21 @@ fn main() {
 
     let mut evaluator = Evaluator::new(&nodes);
 
-    let results = evaluator.evaluate();
+    evaluator.evaluate();
 
     println!("Execution took {} seconds", start.elapsed().as_secs_f32());
 
-    let mut output = results.iter().collect::<Vec<_>>();
+    let output = evaluator.get_vars();
 
-    output.sort_by(|a, b| a.0.cmp(b.0));
-
-    for variable in output {
-        println!("{} = {:?}", variable.0, variable.1);
+    for (i, scope) in output.iter().enumerate() {
+        scope
+            .iter()
+            .collect::<Vec<_>>()
+            .sort_by(|a, b| a.0.cmp(b.0));
+        println!("Scope {}: {{", i);
+        for variable in &**scope {
+            println!("  {} = {:?}", variable.0, variable.1);
+        }
+        println!("}}");
     }
 }

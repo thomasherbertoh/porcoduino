@@ -6,6 +6,8 @@ pub enum TokenType {
     Operator(Operator),
     LBracket,
     RBracket,
+    StartBlock, // `StartBlock` always has the same `depth` attribute as its corresponding `EndBlock`
+    EndBlock,
     End,
 }
 

@@ -192,9 +192,21 @@ impl Lexer {
                 }
                 '{' => {
                     depth += 1;
+                    tokens.push(Token::new(
+                        TokenType::StartBlock,
+                        depth,
+                        Some("start_block".to_string()),
+                        None,
+                    ));
                     self.counter += 1;
                 }
                 '}' => {
+                    tokens.push(Token::new(
+                        TokenType::EndBlock,
+                        depth,
+                        Some("end_block".to_string()),
+                        None,
+                    ));
                     depth -= 1;
                     self.counter += 1;
                 }

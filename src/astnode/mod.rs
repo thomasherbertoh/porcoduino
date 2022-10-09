@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::tokens::{Operator, Value};
 
 pub trait EvalNode {
-    fn eval_node(&self, map: &mut HashMap<String, Value>) -> Value;
+    fn eval_node(&self, vars: &mut Vec<&mut HashMap<String, Value>>) -> Value;
 }
 
 #[derive(Clone, Debug)]
@@ -18,17 +18,19 @@ pub enum ASTNodes {
 pub struct ASTNode {
     pub left: Box<Option<ASTNodes>>,
     pub right: Box<Option<ASTNodes>>,
+    pub depth: u64,
 }
 
 impl ASTNode {
-    pub fn new(left: Box<Option<ASTNodes>>, right: Box<Option<ASTNodes>>) -> Self {
-        Self { left, right }
+    pub fn new(left: Box<Option<ASTNodes>>, right: Box<Option<ASTNodes>>, depth: u64) -> Self {
+        Self { left, right, depth }
     }
 
     pub fn default() -> Self {
         Self {
             left: Box::new(None),
             right: Box::new(None),
+            depth: 0,
         }
     }
 }
@@ -37,13 +39,20 @@ impl ASTNode {
 pub struct ASTOpNode {
     pub node: ASTNode,
     pub op: Operator,
+    pub depth: u64,
 }
 
 impl ASTOpNode {
-    pub fn new(left: Box<Option<ASTNodes>>, right: Box<Option<ASTNodes>>, op: Operator) -> Self {
+    pub fn new(
+        left: Box<Option<ASTNodes>>,
+        right: Box<Option<ASTNodes>>,
+        op: Operator,
+        depth: u64,
+    ) -> Self {
         Self {
-            node: ASTNode::new(left, right),
+            node: ASTNode::new(left, right, depth),
             op,
+            depth,
         }
     }
 }
@@ -62,10 +71,11 @@ impl ASTValNode {
 #[derive(Clone, Debug)]
 pub struct ASTIdentifierNode {
     pub name: String,
+    pub depth: u64,
 }
 
 impl ASTIdentifierNode {
-    pub fn new(name: String) -> Self {
-        Self { name }
+    pub fn new(name: String, depth: u64) -> Self {
+        Self { name, depth }
     }
 }
