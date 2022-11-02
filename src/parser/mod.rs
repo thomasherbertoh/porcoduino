@@ -18,12 +18,19 @@ impl Parser {
         }
     }
 
-    fn astnode_from_token(token: &Token) -> Option<ASTNodes> {
+    fn astnode_from_token(token: &Token, prev: Option<&Token>) -> Option<ASTNodes> {
         match &token.t_type {
-            TokenType::Identifier(name) => Some(ASTNodes::ASTIdentifierNode(
-                ASTIdentifierNode::new(name.to_string(), token.code_depth),
-            )),
-            TokenType::Value(v) => Some(ASTNodes::ASTValNode(ASTValNode::new(v.clone()))),
+            TokenType::Identifier(name) => {
+                Some(ASTNodes::ASTIdentifierNode(ASTIdentifierNode::new(
+                    name.to_string(),
+                    token.code_depth,
+                    prev.is_some() && prev.unwrap().t_type == TokenType::Make,
+                )))
+            }
+            TokenType::Value(v) => Some(ASTNodes::ASTValNode(ASTValNode::new(
+                v.clone(),
+                token.code_depth,
+            ))),
             TokenType::Operator(op) => Some(ASTNodes::ASTOpNode(ASTOpNode::new(
                 Box::new(None),
                 Box::new(None),
@@ -62,18 +69,27 @@ impl Parser {
         self.build_tree(start + 1, ind - 1)
     }
 
-    fn build_tree(&self, start: usize, end: usize) -> ASTNodes {
+    fn build_tree(&self, mut start: usize, end: usize) -> ASTNodes {
         if start == end {
             return match &self.token_list.get(start).unwrap().t_type {
-                TokenType::Identifier(_) | TokenType::Value(_) => {
-                    Parser::astnode_from_token(&self.token_list[start])
-                        .unwrap_or_else(|| panic!("error on token {:?}", self.token_list[start]))
-                }
+                TokenType::Identifier(_) | TokenType::Value(_) => Parser::astnode_from_token(
+                    &self.token_list[start],
+                    self.token_list.get(start - 1),
+                )
+                .unwrap_or_else(|| panic!("[PARSE] Error on token {:?}", self.token_list[start])),
                 _ => panic!(
                     "[PARSE] Expected `Identifier` or `Value`. Found `{:?}`",
                     self.token_list[start].wordy
                 ),
             };
+        }
+
+        // `StartBlock` and `EndBlock` tokens have already served their purpose at this stage; ignore them
+        while matches!(
+            self.token_list.get(start).unwrap().t_type,
+            TokenType::StartBlock | TokenType::EndBlock
+        ) {
+            start += 1;
         }
 
         let lhs;
@@ -100,7 +116,8 @@ impl Parser {
             )
         {
             // no division/multiplication => evaluate normally
-            lhs = Parser::astnode_from_token(&self.token_list[start]);
+            lhs =
+                Parser::astnode_from_token(&self.token_list[start], self.token_list.get(start - 1));
         } else {
             // have (possibly multiple occurrences of) division or multiplication
             let mut offset = 1;
@@ -154,6 +171,15 @@ impl Parser {
             }
 
             lhs = Some(self.build_tree(start, start + op_offset - 1));
+        }
+
+        if start + op_offset > end {
+            return lhs.unwrap_or_else(|| {
+                panic!(
+                    "[PARSE] Unable to evaluate lhs `{:?}`",
+                    &self.token_list[start..=end]
+                )
+            });
         }
 
         let op = match &self.token_list.get(start + op_offset).unwrap().t_type {

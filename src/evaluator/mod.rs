@@ -5,12 +5,13 @@ use crate::{
     tokens::{Operator, Value},
 };
 
-pub struct Evaluator<'a> {
-    evaluator_vars: Vec<&'a mut HashMap<String, Value>>,
+#[derive(Clone, Debug)]
+pub struct Evaluator {
+    evaluator_vars: Vec<HashMap<String, Value>>,
     nodes: Vec<ASTNodes>,
 }
 
-impl<'a> Evaluator<'a> {
+impl Evaluator {
     pub fn new(nodes: &[ASTNodes]) -> Self {
         Self {
             evaluator_vars: Vec::new(),
@@ -19,27 +20,35 @@ impl<'a> Evaluator<'a> {
     }
 
     pub fn evaluate(&mut self) {
-        for node in &self.nodes {
+        for node in &self.nodes.clone() {
             let _ = match node {
-                ASTNodes::ASTOpNode(op_node) => op_node.eval_node(&mut self.evaluator_vars),
+                ASTNodes::ASTOpNode(op_node) => op_node.eval_node(self),
                 _ => panic!("[EVAL] Expected `Operator`. Found `{:?}`", node),
             };
         }
     }
 
-    pub fn get_vars(self) -> Vec<&'a mut HashMap<String, Value>> {
+    pub fn get_vars(self) -> Vec<HashMap<String, Value>> {
         self.evaluator_vars
+    }
+
+    pub fn add_new_scope(&mut self) {
+        self.evaluator_vars.push(HashMap::new());
+    }
+
+    pub fn remove_old_scope(&mut self) {
+        self.evaluator_vars.remove(self.evaluator_vars.len() - 1);
     }
 }
 
 impl EvalNode for ASTOpNode {
-    fn eval_node(&self, vars: &mut Vec<&mut HashMap<String, Value>>) -> Value {
+    fn eval_node(&self, evaluator: &mut Evaluator) -> Value {
         let left_node = if self.node.clone().left.is_none() {
             None
         } else {
             match self.node.clone().left.unwrap() {
-                ASTNodes::ASTOpNode(node) => Some(node.eval_node(vars)),
-                ASTNodes::ASTValNode(node) => Some(node.eval_node(vars)),
+                ASTNodes::ASTOpNode(node) => Some(node.eval_node(evaluator)),
+                ASTNodes::ASTValNode(node) => Some(node.eval_node(evaluator)),
                 ASTNodes::ASTIdentifierNode(ident) => match self.op {
                     Operator::Assignment => None,
                     _ => {
@@ -47,8 +56,12 @@ impl EvalNode for ASTOpNode {
                         let depth = ident.depth;
                         let val;
                         loop {
-                            let tmp = (*vars).get(depth as usize).unwrap().get(&ident.name);
-                            match tmp {
+                            match evaluator
+                                .evaluator_vars
+                                .get(depth as usize)
+                                .unwrap()
+                                .get(&ident.name)
+                            {
                                 Some(v) => {
                                     val = Some(v.clone());
                                     // break out when variable found
@@ -76,15 +89,19 @@ impl EvalNode for ASTOpNode {
         };
 
         let right_node = match self.node.clone().right.unwrap() {
-            ASTNodes::ASTOpNode(node) => node.eval_node(vars),
-            ASTNodes::ASTValNode(node) => node.eval_node(vars),
+            ASTNodes::ASTOpNode(node) => node.eval_node(evaluator),
+            ASTNodes::ASTValNode(node) => node.eval_node(evaluator),
             ASTNodes::ASTIdentifierNode(ident) => {
                 // search through relevant block depths
                 let depth = ident.depth;
                 let val;
                 loop {
-                    let tmp = (*vars).get(depth as usize).unwrap().get(&ident.name);
-                    match tmp {
+                    match evaluator
+                        .evaluator_vars
+                        .get(depth as usize)
+                        .unwrap()
+                        .get(&ident.name)
+                    {
                         Some(v) => {
                             val = Some(v.clone());
                             // break out when variable found
@@ -116,34 +133,64 @@ impl EvalNode for ASTOpNode {
                     ASTNodes::ASTNode(node) => node.depth,
                     ASTNodes::ASTOpNode(node) => node.depth,
                     ASTNodes::ASTIdentifierNode(node) => node.depth,
-                    ASTNodes::ASTValNode(_) => {
-                        panic!("[EVAL] Invalid operation: Assignment to `Value`")
-                    }
+                    ASTNodes::ASTValNode(node) => node.depth,
                 };
 
-                let curr_map_mut = vars.get_mut(depth as usize).unwrap();
-                let curr_map = curr_map_mut.clone();
+                // create scopes that should now exist
+                while depth >= evaluator.evaluator_vars.len() as u64 {
+                    evaluator.add_new_scope();
+                }
 
-                curr_map_mut.insert(
-                    match self.node.clone().left.unwrap() {
-                        ASTNodes::ASTIdentifierNode(ident) => {
-                            if !curr_map.contains_key(&ident.name) || right_node.get_type()
-                                == *curr_map.get(&ident.name).unwrap().get_type()
-                            {
-                                ident.name
-                            } else {
-                                panic!("[EVAL] Invalid operation: assigning value of type `{}`({:?}) to variable of type `{}`({})",
+                // delete scopes that should no longer exist
+                while depth < (evaluator.evaluator_vars.len() as u64) - 1 {
+                    evaluator.remove_old_scope();
+                }
+
+                let mut search_depth = depth;
+                // break on declaration or successful redefinition
+                loop {
+                    let curr_map_mut = evaluator
+                        .evaluator_vars
+                        .get_mut(search_depth as usize)
+                        .unwrap_or_else(|| {
+                            panic!("[EVAL] variables disappeared for some reason lol")
+                        });
+                    let curr_map = curr_map_mut.clone();
+
+                    let ident = match self.node.clone().left.unwrap() {
+                        ASTNodes::ASTIdentifierNode(ident) => ident,
+                        _ => panic!("[EVAL] Expected `Identifier`. Found `{:?}`", self.node.left),
+                    };
+
+                    if !curr_map.contains_key(&ident.name) && ident.is_declaration {
+                        curr_map_mut.insert(ident.name, right_node.clone());
+                        break; // successful declaration
+                    } else if curr_map.contains_key(&ident.name) {
+                        if ident.is_declaration {
+                            panic!("[EVAL] Re-declaration of variable {}", ident.name);
+                        } else if right_node.get_type()
+                            != curr_map.get(&ident.name).unwrap().get_type()
+                        {
+                            // wrong type
+                            panic!("[EVAL] Invalid operation: assigning value of type `{}`({:?}) to variable of type `{}`({})",
                                     right_node.get_type(),
                                     right_node,
-                                    vars.get(ident.depth as usize).unwrap().get(&ident.name).unwrap().get_type(),
+                                    evaluator.evaluator_vars.get((ident.depth) as usize).unwrap().get(&ident.name).unwrap().get_type(),
                                     ident.name
-                                );
-                            }
+                        );
+                        } else {
+                            // redefine variable
+                            *curr_map_mut.get_mut(&ident.name).unwrap() = right_node.clone();
+                            break; // successful redefinition
                         }
-                        _ => panic!("[EVAL] Expected `Identifier`. Found `{:?}`", self.node.left),
-                    },
-                    right_node.clone(),
-                );
+                    } else {
+                        search_depth = search_depth.checked_sub(1).unwrap_or_else(|| panic!(
+                            "[EVAL] Unable to fetch value of identifier `{}`. Is it in scope? Current depth: {}, vars: {:?}",
+                            ident.name, depth, evaluator.evaluator_vars
+                        ));
+                    }
+                }
+
                 return right_node;
             } else {
                 panic!("[EVAL] Expected `Identifier`. Found `{:?}`", left_node);
@@ -401,7 +448,7 @@ impl EvalNode for ASTOpNode {
 }
 
 impl EvalNode for ASTValNode {
-    fn eval_node(&self, _vars: &mut Vec<&mut HashMap<String, Value>>) -> Value {
+    fn eval_node(&self, _evaluator: &mut Evaluator) -> Value {
         self.val.clone()
     }
 }

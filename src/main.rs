@@ -55,12 +55,10 @@ fn main() {
     let output = evaluator.get_vars();
 
     for (i, scope) in output.iter().enumerate() {
-        scope
-            .iter()
-            .collect::<Vec<_>>()
-            .sort_by(|a, b| a.0.cmp(b.0));
+        let mut scope_vec = scope.iter().collect::<Vec<_>>();
+        scope_vec.sort_by(|a, b| a.0.cmp(b.0));
         println!("Scope {}: {{", i);
-        for variable in &**scope {
+        for variable in scope_vec {
             println!("  {} = {:?}", variable.0, variable.1);
         }
         println!("}}");

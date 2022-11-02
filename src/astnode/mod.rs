@@ -1,9 +1,10 @@
-use std::collections::HashMap;
-
-use crate::tokens::{Operator, Value};
+use crate::{
+    evaluator::Evaluator,
+    tokens::{Operator, Value},
+};
 
 pub trait EvalNode {
-    fn eval_node(&self, vars: &mut Vec<&mut HashMap<String, Value>>) -> Value;
+    fn eval_node(&self, evaluator: &mut Evaluator) -> Value;
 }
 
 #[derive(Clone, Debug)]
@@ -60,11 +61,12 @@ impl ASTOpNode {
 #[derive(Clone, Debug)]
 pub struct ASTValNode {
     pub val: Value,
+    pub depth: u64,
 }
 
 impl ASTValNode {
-    pub fn new(val: Value) -> Self {
-        Self { val }
+    pub fn new(val: Value, depth: u64) -> Self {
+        Self { val, depth }
     }
 }
 
@@ -72,10 +74,15 @@ impl ASTValNode {
 pub struct ASTIdentifierNode {
     pub name: String,
     pub depth: u64,
+    pub is_declaration: bool,
 }
 
 impl ASTIdentifierNode {
-    pub fn new(name: String, depth: u64) -> Self {
-        Self { name, depth }
+    pub fn new(name: String, depth: u64, is_declaration: bool) -> Self {
+        Self {
+            name,
+            depth,
+            is_declaration,
+        }
     }
 }
