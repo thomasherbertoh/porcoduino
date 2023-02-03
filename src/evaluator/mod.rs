@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    astnode::{ASTNodes, ASTOpNode, ASTValNode, EvalNode},
+    astnode::{ASTBlockNode, ASTNodes, ASTOpNode, ASTValNode, EvalNode},
     tokens::{Operator, Value},
 };
 
@@ -9,6 +9,8 @@ use crate::{
 pub struct Evaluator {
     evaluator_vars: Vec<HashMap<String, Value>>,
     nodes: Vec<ASTNodes>,
+    last_ret: Option<Value>,
+    ret_depth: Option<u64>, // depth the value `last_ret` was returned from
 }
 
 impl Evaluator {
@@ -16,13 +18,16 @@ impl Evaluator {
         Self {
             evaluator_vars: Vec::new(),
             nodes: nodes.to_vec(),
+            last_ret: None,
+            ret_depth: None,
         }
     }
 
     pub fn evaluate(&mut self) {
         for node in &self.nodes.clone() {
-            let _ = match node {
+            match node {
                 ASTNodes::ASTOpNode(op_node) => op_node.eval_node(self),
+                ASTNodes::ASTBlockNode(block_node) => block_node.eval_node(self),
                 _ => panic!("[EVAL] Expected `Operator`. Found `{:?}`", node),
             };
         }
@@ -43,44 +48,52 @@ impl Evaluator {
 
 impl EvalNode for ASTOpNode {
     fn eval_node(&self, evaluator: &mut Evaluator) -> Value {
+        let mut to_ret = false;
         let left_node = if self.node.clone().left.is_none() {
             None
         } else {
             match self.node.clone().left.unwrap() {
                 ASTNodes::ASTOpNode(node) => Some(node.eval_node(evaluator)),
-                ASTNodes::ASTValNode(node) => Some(node.eval_node(evaluator)),
-                ASTNodes::ASTIdentifierNode(ident) => match self.op {
-                    Operator::Assignment => None,
-                    _ => {
-                        // search through relevant block depths
-                        let depth = ident.depth;
-                        let val;
-                        loop {
-                            match evaluator
-                                .evaluator_vars
-                                .get(depth as usize)
-                                .unwrap()
-                                .get(&ident.name)
-                            {
-                                Some(v) => {
-                                    val = Some(v.clone());
-                                    // break out when variable found
-                                    break;
-                                }
-                                None => {
-                                    // error if run out of scopes to search for variable in
-                                    depth.checked_sub(1).unwrap_or_else(||
-                                        panic!(
-                                            "[EVAL] Unable to fetch value of identifier `{}`. Is it in scope?",
-                                            ident.name
-                                        )
-                                    );
+                ASTNodes::ASTValNode(node) => {
+                    to_ret |= node.is_ret;
+                    Some(node.eval_node(evaluator))
+                }
+                ASTNodes::ASTIdentifierNode(ident) => {
+                    to_ret |= ident.is_ret;
+                    match self.op {
+                        Operator::Assignment => None,
+                        _ => {
+                            // search through relevant block depths
+                            let depth = ident.depth;
+                            let val;
+                            loop {
+                                match evaluator
+                                    .evaluator_vars
+                                    .get(depth as usize)
+                                    .unwrap()
+                                    .get(&ident.name)
+                                {
+                                    Some(v) => {
+                                        val = Some(v.clone());
+                                        // break out when variable found
+                                        break;
+                                    }
+                                    None => {
+                                        // error if run out of scopes to search for variable in
+                                        depth.checked_sub(1).unwrap_or_else(||
+                                            panic!(
+                                                "[EVAL] Unable to fetch value of identifier `{}`. Is it in scope?",
+                                                ident.name
+                                            )
+                                        );
+                                    }
                                 }
                             }
+                            val
                         }
-                        val
                     }
-                },
+                }
+                ASTNodes::ASTBlockNode(block) => Some(block.eval_node(evaluator)),
                 _ => panic!(
                     "[EVAL] eval_node() called on unevaluatable `{:?}`",
                     self.node.clone().left.unwrap()
@@ -90,10 +103,14 @@ impl EvalNode for ASTOpNode {
 
         let right_node = match self.node.clone().right.unwrap() {
             ASTNodes::ASTOpNode(node) => node.eval_node(evaluator),
-            ASTNodes::ASTValNode(node) => node.eval_node(evaluator),
+            ASTNodes::ASTValNode(node) => {
+                to_ret |= node.is_ret;
+                node.eval_node(evaluator)
+            }
             ASTNodes::ASTIdentifierNode(ident) => {
+                to_ret |= ident.is_ret;
                 // search through relevant block depths
-                let depth = ident.depth;
+                let mut depth = ident.depth;
                 let val;
                 loop {
                     match evaluator
@@ -109,17 +126,20 @@ impl EvalNode for ASTOpNode {
                         }
                         None => {
                             // error if run out of scopes to search for variable in
-                            depth.checked_sub(1).unwrap_or_else(||
+                            if depth == 0 {
                                 panic!(
                                     "[EVAL] Unable to fetch value of identifier `{}`. Is it in scope?",
                                     ident.name
-                                )
-                            );
+                                );
+                            } else {
+                                depth -= 1;
+                            }
                         }
                     }
                 }
                 val.unwrap()
             }
+            ASTNodes::ASTBlockNode(block) => block.eval_node(evaluator),
             _ => panic!(
                 "[EVAL] eval_node() called on unevaluatable `{:?}`",
                 self.node.clone().right.unwrap()
@@ -129,12 +149,7 @@ impl EvalNode for ASTOpNode {
         // assignment
         if let Operator::Assignment = self.op {
             if left_node.is_none() {
-                let depth = match self.node.right.clone().unwrap() {
-                    ASTNodes::ASTNode(node) => node.depth,
-                    ASTNodes::ASTOpNode(node) => node.depth,
-                    ASTNodes::ASTIdentifierNode(node) => node.depth,
-                    ASTNodes::ASTValNode(node) => node.depth,
-                };
+                let depth = self.depth;
 
                 // create scopes that should now exist
                 while depth >= evaluator.evaluator_vars.len() as u64 {
@@ -163,11 +178,17 @@ impl EvalNode for ASTOpNode {
                     };
 
                     if !curr_map.contains_key(&ident.name) && ident.is_declaration {
-                        curr_map_mut.insert(ident.name, right_node.clone());
+                        curr_map_mut.insert(ident.name.clone(), right_node.clone());
                         break; // successful declaration
                     } else if curr_map.contains_key(&ident.name) {
                         if ident.is_declaration {
-                            panic!("[EVAL] Re-declaration of variable {}", ident.name);
+                            panic!(
+                                "[EVAL] Re-declaration of variable `{}`. It currently has value `{:?}` and you're trying to assign it `{:?}`. Self = {:#?}",
+                                ident.name,
+                                curr_map.get(&ident.name).unwrap(),
+                                right_node,
+                                self,  // FIXME: parser doesn't terminate first block of `scoping.pd` correctly?
+                            );
                         } else if right_node.get_type()
                             != curr_map.get(&ident.name).unwrap().get_type()
                         {
@@ -190,14 +211,22 @@ impl EvalNode for ASTOpNode {
                         ));
                     }
                 }
-
+                if to_ret {
+                    evaluator.last_ret = Some(right_node.clone());
+                    evaluator.ret_depth = Some(depth);
+                }
                 return right_node;
+            } else if let Some(Value::Integer(_)) = left_node {
+                return left_node.unwrap();
             } else {
-                panic!("[EVAL] Expected `Identifier`. Found `{:?}`", left_node);
+                panic!(
+                    "[EVAL] Expected `Identifier`. Found `{:?}`, self = {:#?}",
+                    left_node, self
+                );
             }
         }
 
-        match self.op {
+        let res = match self.op {
             Operator::Addition => match left_node {
                 Some(Value::String(sl)) => match right_node {
                     Value::String(sr) => Value::String(sl + &sr),
@@ -224,14 +253,14 @@ impl EvalNode for ASTOpNode {
                             il, ir
                         )
                     })),
-                    Value::Boolean(br) => Value::Integer(
-                        il.checked_add(if br { 1 } else { 0 }).unwrap_or_else(|| {
+                    Value::Boolean(br) => {
+                        Value::Integer(il.checked_add(br as i64).unwrap_or_else(|| {
                             panic!(
                                 "[EVAL] Integers can only be up to 64 bits: `{} + {}`",
                                 il, br
                             )
-                        }),
-                    ),
+                        }))
+                    }
                 },
                 Some(Value::Boolean(bl)) => match right_node {
                     Value::Boolean(br) => Value::Boolean(bl || br),
@@ -247,14 +276,14 @@ impl EvalNode for ASTOpNode {
                             il, ir
                         )
                     })),
-                    Value::Boolean(br) => Value::Integer(
-                        il.checked_sub(if br { 1 } else { 0 }).unwrap_or_else(|| {
+                    Value::Boolean(br) => {
+                        Value::Integer(il.checked_sub(br as i64).unwrap_or_else(|| {
                             panic!(
                                 "[EVAL] Error while performing subtraction: `{} - {}`",
                                 il, br
                             )
-                        }),
-                    ),
+                        }))
+                    }
                     _ => panic!(
                         "[EVAL] Invalid operation `{:?}` on value `{:?}`",
                         self.op, right_node
@@ -283,7 +312,7 @@ impl EvalNode for ASTOpNode {
             Operator::Multiplication => match left_node.unwrap() {
                 Value::String(sl) => match right_node {
                     Value::Integer(ir) => Value::String(sl.repeat(ir as usize)),
-                    Value::Boolean(br) => Value::String(sl.repeat(if br { 1 } else { 0 })),
+                    Value::Boolean(br) => Value::String(sl.repeat(br as usize)),
                     _ => panic!(
                         "[EVAL] Invalid operation `{:?}` on value `{:?}`",
                         self.op, right_node
@@ -312,17 +341,17 @@ impl EvalNode for ASTOpNode {
                             il, ir
                         )
                     })),
-                    Value::Boolean(br) => Value::Integer(
-                        il.checked_mul(if br { 1 } else { 0 }).unwrap_or_else(|| {
+                    Value::Boolean(br) => {
+                        Value::Integer(il.checked_mul(br as i64).unwrap_or_else(|| {
                             panic!(
                                 "[EVAL] Integers can only be up to 64 bits: `{} + {}`",
                                 il, br
                             )
-                        }),
-                    ),
+                        }))
+                    }
                 },
                 Value::Boolean(bl) => match right_node {
-                    Value::String(sr) => Value::String(sr.repeat(if bl { 1 } else { 0 })),
+                    Value::String(sr) => Value::String(sr.repeat(bl as usize)),
                     Value::Char(cr) => {
                         if bl {
                             Value::Char(cr)
@@ -330,14 +359,14 @@ impl EvalNode for ASTOpNode {
                             Value::Char('\0')
                         }
                     }
-                    Value::Integer(ir) => Value::Integer(
-                        ir.checked_mul(if bl { 1 } else { 0 }).unwrap_or_else(|| {
+                    Value::Integer(ir) => {
+                        Value::Integer(ir.checked_mul(bl as i64).unwrap_or_else(|| {
                             panic!(
                                 "[EVAL] Integers can only be up to 64 bits: `{} * {}`",
                                 bl, ir
                             )
-                        }),
-                    ),
+                        }))
+                    }
                     Value::Boolean(br) => Value::Boolean(bl && br),
                 },
             },
@@ -347,9 +376,9 @@ impl EvalNode for ASTOpNode {
                         panic!("[EVAL] Integer division error: `{} / {}`", il, ir)
                     })),
                     Value::Boolean(br) => {
-                        Value::Integer(il.checked_div(if br { 1 } else { 0 }).unwrap_or_else(
-                            || panic!("[EVAL] Integer division error: `{} / {}`", il, br),
-                        ))
+                        Value::Integer(il.checked_div(br as i64).unwrap_or_else(|| {
+                            panic!("[EVAL] Integer division error: `{} / {}`", il, br)
+                        }))
                     }
                     _ => panic!(
                         "[EVAL] Invalid operation `{:?}` on value `{:?}`",
@@ -375,7 +404,7 @@ impl EvalNode for ASTOpNode {
                         self.op, right_node
                     ),
                     Value::Integer(ir) => Value::Integer(il & ir),
-                    Value::Boolean(br) => Value::Integer(il & if br { 1 } else { 0 }),
+                    Value::Boolean(br) => Value::Integer(il & br as i64),
                 },
                 Value::Boolean(bl) => match right_node {
                     Value::String(_) | Value::Char(_) => {
@@ -384,7 +413,7 @@ impl EvalNode for ASTOpNode {
                             self.op, right_node
                         )
                     }
-                    Value::Integer(ir) => Value::Boolean((if bl { 1 } else { 0 } & ir) % 2 != 0),
+                    Value::Integer(ir) => Value::Boolean((bl as i64 & ir) % 2 != 0),
                     Value::Boolean(br) => Value::Boolean(bl & br),
                 },
             },
@@ -401,7 +430,7 @@ impl EvalNode for ASTOpNode {
                         self.op, right_node
                     ),
                     Value::Integer(ir) => Value::Integer(il | ir),
-                    Value::Boolean(br) => Value::Integer(il | if br { 1 } else { 0 }),
+                    Value::Boolean(br) => Value::Integer(il | br as i64),
                 },
                 Value::Boolean(bl) => match right_node {
                     Value::String(_) | Value::Char(_) => {
@@ -410,7 +439,7 @@ impl EvalNode for ASTOpNode {
                             self.op, right_node
                         )
                     }
-                    Value::Integer(ir) => Value::Boolean((if bl { 1 } else { 0 } | ir) % 2 != 0),
+                    Value::Integer(ir) => Value::Boolean((bl as i64 | ir) % 2 != 0),
                     Value::Boolean(br) => Value::Boolean(bl | br),
                 },
             },
@@ -443,12 +472,32 @@ impl EvalNode for ASTOpNode {
                 ),
             },
             Operator::Assignment => unreachable!(),
+        };
+        if to_ret {
+            evaluator.last_ret = Some(res.clone());
+            evaluator.ret_depth = Some(self.depth); // takes depth of the `ASTOpNode`
         }
+        res
     }
 }
 
 impl EvalNode for ASTValNode {
     fn eval_node(&self, _evaluator: &mut Evaluator) -> Value {
         self.val.clone()
+    }
+}
+
+impl EvalNode for ASTBlockNode {
+    fn eval_node(&self, evaluator: &mut Evaluator) -> Value {
+        let mut out = None;
+        for node in &self.nodes {
+            out = match node {
+                ASTNodes::ASTOpNode(op) => Some(op.eval_node(evaluator)),
+                ASTNodes::ASTValNode(val) => Some(val.eval_node(evaluator)),
+                ASTNodes::ASTBlockNode(block) => Some(block.eval_node(evaluator)),
+                _ => panic!("[EVAL] eval_node() called on unevaluatable `{:?}`", node),
+            };
+        }
+        out.unwrap()
     }
 }

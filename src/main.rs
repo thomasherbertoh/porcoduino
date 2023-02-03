@@ -34,7 +34,7 @@ fn main() {
 
     let parser = Parser::new(&tokens);
 
-    let nodes = parser.parse();
+    let nodes = parser.parse(0, tokens.len() - 1);
 
     /*
     for node in nodes.clone() {

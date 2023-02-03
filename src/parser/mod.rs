@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    astnode::{ASTIdentifierNode, ASTNodes, ASTOpNode, ASTValNode},
+    astnode::{ASTBlockNode, ASTIdentifierNode, ASTNodes, ASTOpNode, ASTValNode},
     tokens::{Operator, Token, TokenType, Value},
 };
 
@@ -18,18 +18,24 @@ impl Parser {
         }
     }
 
-    fn astnode_from_token(token: &Token, prev: Option<&Token>) -> Option<ASTNodes> {
+    fn astnode_from_token(
+        token: &Token,
+        prev: Option<&Token>,
+        next: Option<&Token>,
+    ) -> Option<ASTNodes> {
         match &token.t_type {
             TokenType::Identifier(name) => {
                 Some(ASTNodes::ASTIdentifierNode(ASTIdentifierNode::new(
                     name.to_string(),
                     token.code_depth,
                     prev.is_some() && prev.unwrap().t_type == TokenType::Make,
+                    next.is_some() && next.unwrap().t_type == TokenType::EndBlock,
                 )))
             }
             TokenType::Value(v) => Some(ASTNodes::ASTValNode(ASTValNode::new(
                 v.clone(),
                 token.code_depth,
+                next.is_some() && next.unwrap().t_type == TokenType::EndBlock,
             ))),
             TokenType::Operator(op) => Some(ASTNodes::ASTOpNode(ASTOpNode::new(
                 Box::new(None),
@@ -69,17 +75,37 @@ impl Parser {
         self.build_tree(start + 1, ind - 1)
     }
 
+    fn find_end_of_block_index(&self, start: usize, end: usize) -> usize {
+        let start_depth = self.token_list.get(start).unwrap().code_depth;
+        let mut ind = start + 1;
+        while ind <= end && self.token_list.get(ind).unwrap().code_depth >= start_depth {
+            ind += 1;
+        }
+        // don't go out of range
+        if ind > end {
+            end
+        } else {
+            ind
+        }
+    }
+
     fn build_tree(&self, mut start: usize, end: usize) -> ASTNodes {
         if start == end {
             return match &self.token_list.get(start).unwrap().t_type {
                 TokenType::Identifier(_) | TokenType::Value(_) => Parser::astnode_from_token(
                     &self.token_list[start],
                     self.token_list.get(start - 1),
+                    self.token_list.get(start + 1),
                 )
                 .unwrap_or_else(|| panic!("[PARSE] Error on token {:?}", self.token_list[start])),
+                TokenType::End | TokenType::EndBlock => ASTNodes::ASTValNode(ASTValNode::new(
+                    Value::Integer(0),
+                    self.token_list[start].code_depth,
+                    false,
+                )),
                 _ => panic!(
-                    "[PARSE] Expected `Identifier` or `Value`. Found `{:?}`",
-                    self.token_list[start].wordy
+                    "[PARSE] Expected `Identifier` or `Value`. Found `{:?}` at index {}",
+                    self.token_list[start], start
                 ),
             };
         }
@@ -87,7 +113,7 @@ impl Parser {
         // `StartBlock` and `EndBlock` tokens have already served their purpose at this stage; ignore them
         while matches!(
             self.token_list.get(start).unwrap().t_type,
-            TokenType::StartBlock | TokenType::EndBlock
+            TokenType::StartBlock
         ) {
             start += 1;
         }
@@ -95,7 +121,9 @@ impl Parser {
         let lhs;
         let mut op_offset = 1;
 
-        if let TokenType::Operator(_) = &self.token_list.get(start).unwrap().t_type {
+        if self.token_list.get(start).unwrap().t_type == TokenType::Make {
+            return self.build_tree(start + 1, end);
+        } else if let TokenType::Operator(_) = &self.token_list.get(start).unwrap().t_type {
             // first token is an operator (hopefully unary)
             lhs = None;
             op_offset = 0;
@@ -116,8 +144,11 @@ impl Parser {
             )
         {
             // no division/multiplication => evaluate normally
-            lhs =
-                Parser::astnode_from_token(&self.token_list[start], self.token_list.get(start - 1));
+            lhs = Parser::astnode_from_token(
+                &self.token_list[start],
+                self.token_list.get(start - 1),
+                self.token_list.get(start + 1),
+            );
         } else {
             // have (possibly multiple occurrences of) division or multiplication
             let mut offset = 1;
@@ -183,19 +214,26 @@ impl Parser {
         }
 
         let op = match &self.token_list.get(start + op_offset).unwrap().t_type {
-            TokenType::Operator(t) => match t {
-                Operator::Assignment => {
-                    panic!(
-                        "[PARSE] Unexpected assignment operator at index {}",
-                        start + op_offset
-                    )
-                }
-                _ => t,
-            },
+            TokenType::Operator(o) => o,
             TokenType::End => return lhs.unwrap(),
+            TokenType::EndBlock => {
+                return match lhs.unwrap() {
+                    ASTNodes::ASTNode(_) => todo!(), // place `is_ret = true` in bottom-rightmost child node
+                    ASTNodes::ASTOpNode(_) => todo!(), // error? two consecutive operators
+                    ASTNodes::ASTValNode(mut node) => {
+                        node.is_ret = true;
+                        ASTNodes::ASTValNode(node)
+                    }
+                    ASTNodes::ASTIdentifierNode(mut node) => {
+                        node.is_ret = true;
+                        ASTNodes::ASTIdentifierNode(node)
+                    }
+                    _ => todo!(),
+                };
+            }
             _ => panic!(
-                "[PARSE] Expected `Operator`. Found `{:?}`",
-                self.token_list[start + op_offset]
+                "[PARSE] Expected `Operator`, end of statement, or end of block. Found `{:?}` at index `{}`",
+                self.token_list[start + op_offset], start + op_offset,
             ),
         };
 
@@ -207,55 +245,116 @@ impl Parser {
         ))
     }
 
-    pub fn parse(&self) -> Vec<ASTNodes> {
-        let mut ind = 0;
+    pub fn parse(&self, start: usize, end: usize) -> Vec<ASTNodes> {
+        let mut ind = start;
 
         let mut nodes = Vec::new();
 
-        while ind < self.token_list.len() {
+        while ind < self.token_list.len() && ind <= end {
             // build lhs
-            if self.token_list[ind].t_type == TokenType::Make {
-                ind += 1;
+            if matches!(self.token_list[ind].t_type, TokenType::Make) {
+                ind += 1; // FIXME: should this also skip `EndBlock`s?
             }
 
-            let start_lhs = ind;
+            let mut start_lhs = ind;
             let mut end_lhs = ind;
+            let lhs;
 
-            // find end of lhs
-            while self.token_list[ind].t_type != TokenType::End
-                && self.token_list[ind].t_type != TokenType::Operator(Operator::Assignment)
+            if ind < self.token_list.len()
+                && self.token_list[start_lhs].t_type == TokenType::StartBlock
             {
-                end_lhs = ind;
-                ind += 1;
+                let open_ind = start_lhs;
+                start_lhs += 1;
+                ind = start_lhs;
+                // find end of block
+                while ind <= end
+                    && self.token_list[ind].code_depth == self.token_list[start_lhs].code_depth
+                {
+                    end_lhs = ind;
+                    ind += 1;
+                }
+                let build_lhs = self.parse(start_lhs, end_lhs);
+                lhs = ASTNodes::ASTBlockNode(ASTBlockNode::new(build_lhs, open_ind));
+            } else {
+                // find end of lhs
+                while ind <= end && ind < self.token_list.len() {
+                    if matches!(
+                        self.token_list[ind].t_type,
+                        TokenType::End
+                            | TokenType::EndBlock
+                            | TokenType::Operator(Operator::Assignment)
+                    ) {
+                        break;
+                    }
+                    end_lhs = ind;
+                    if ind == end {
+                        break;
+                    }
+                    ind += 1;
+                }
+                lhs = self.build_tree(start_lhs, end_lhs);
             }
-
-            let lhs = self.build_tree(start_lhs, end_lhs);
 
             // check if done
-            if self.token_list[ind].t_type == TokenType::End {
+            if ind < self.token_list.len()
+                && (matches!(
+                    self.token_list[ind].t_type,
+                    TokenType::End | TokenType::EndBlock
+                ))
+            {
                 nodes.push(lhs);
                 ind += 1;
+                continue; // this shouldn't have a rhs
+            }
+
+            // block nodes shouldn't be lhs => cannot have rhs => skip production of rhs
+            if let ASTNodes::ASTBlockNode(_) = lhs {
+                nodes.push(lhs);
                 continue;
             }
 
             // build rhs
             ind += 1;
-            let start_rhs = ind;
+            let mut start_rhs = ind;
             let mut end_rhs = ind;
-            while self.token_list[ind].t_type != TokenType::End {
-                end_rhs = ind;
-                ind += 1;
+            let mut rhs = None;
+
+            if ind < self.token_list.len() {
+                if self.token_list[start_rhs].t_type == TokenType::StartBlock {
+                    let open_ind = start_rhs;
+                    start_rhs += 1;
+                    ind = start_rhs;
+                    // find end of block
+                    while self.token_list[ind].code_depth == self.token_list[start_rhs].code_depth {
+                        end_rhs = ind;
+                        ind += 1;
+                    }
+                    let build_rhs = self.parse(start_rhs, end_rhs);
+                    rhs = Some(ASTNodes::ASTBlockNode(ASTBlockNode::new(
+                        build_rhs, open_ind,
+                    )));
+                } else {
+                    let end_block_ind = self.find_end_of_block_index(start_rhs, end);
+                    while ind < end_block_ind && self.token_list[ind].t_type != TokenType::End {
+                        end_rhs = ind;
+                        ind += 1;
+                    }
+                    rhs = Some(self.build_tree(start_rhs, end_rhs));
+                }
+
+                ind += 1; // point to next line
             }
-            let rhs = self.build_tree(start_rhs, end_rhs);
 
-            ind += 1; // point to next line
-
-            nodes.push(ASTNodes::ASTOpNode(ASTOpNode::new(
-                Box::new(Some(lhs)),
-                Box::new(Some(rhs)),
-                Operator::Assignment,
-                self.token_list[start_lhs].code_depth,
-            )));
+            if rhs.is_none() {
+                nodes.push(lhs);
+            } else {
+                nodes.push(ASTNodes::ASTOpNode(ASTOpNode::new(
+                    Box::new(Some(lhs)),
+                    Box::new(rhs),
+                    Operator::Assignment,
+                    self.token_list[start_lhs].code_depth,
+                )));
+            }
         }
 
         nodes

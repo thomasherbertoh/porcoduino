@@ -3,4 +3,8 @@ make a = 1;
 	a = 2;
 	make b = 3;
 }
-b = 4;
+make c = {
+	make d = 5;
+	make e = 6;
+	d * e
+};

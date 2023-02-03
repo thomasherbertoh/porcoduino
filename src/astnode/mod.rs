@@ -13,9 +13,10 @@ pub enum ASTNodes {
     ASTOpNode(ASTOpNode),
     ASTValNode(ASTValNode),
     ASTIdentifierNode(ASTIdentifierNode),
+    ASTBlockNode(ASTBlockNode),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ASTNode {
     pub left: Box<Option<ASTNodes>>,
     pub right: Box<Option<ASTNodes>>,
@@ -25,14 +26,6 @@ pub struct ASTNode {
 impl ASTNode {
     pub fn new(left: Box<Option<ASTNodes>>, right: Box<Option<ASTNodes>>, depth: u64) -> Self {
         Self { left, right, depth }
-    }
-
-    pub fn default() -> Self {
-        Self {
-            left: Box::new(None),
-            right: Box::new(None),
-            depth: 0,
-        }
     }
 }
 
@@ -62,11 +55,12 @@ impl ASTOpNode {
 pub struct ASTValNode {
     pub val: Value,
     pub depth: u64,
+    pub is_ret: bool,
 }
 
 impl ASTValNode {
-    pub fn new(val: Value, depth: u64) -> Self {
-        Self { val, depth }
+    pub fn new(val: Value, depth: u64, is_ret: bool) -> Self {
+        Self { val, depth, is_ret }
     }
 }
 
@@ -75,14 +69,28 @@ pub struct ASTIdentifierNode {
     pub name: String,
     pub depth: u64,
     pub is_declaration: bool,
+    pub is_ret: bool,
 }
 
 impl ASTIdentifierNode {
-    pub fn new(name: String, depth: u64, is_declaration: bool) -> Self {
+    pub fn new(name: String, depth: u64, is_declaration: bool, is_ret: bool) -> Self {
         Self {
             name,
             depth,
             is_declaration,
+            is_ret,
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ASTBlockNode {
+    pub nodes: Vec<ASTNodes>,
+    _id: usize, // index of `StartBlock` node denoting this block?
+}
+
+impl ASTBlockNode {
+    pub fn new(nodes: Vec<ASTNodes>, id: usize) -> Self {
+        Self { nodes, _id: id }
     }
 }
