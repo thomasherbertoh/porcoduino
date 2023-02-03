@@ -187,7 +187,7 @@ impl EvalNode for ASTOpNode {
                                 ident.name,
                                 curr_map.get(&ident.name).unwrap(),
                                 right_node,
-                                self,  // FIXME: parser doesn't terminate first block of `scoping.pd` correctly?
+                                self, 
                             );
                         } else if right_node.get_type()
                             != curr_map.get(&ident.name).unwrap().get_type()

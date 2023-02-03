@@ -253,7 +253,7 @@ impl Parser {
         while ind < self.token_list.len() && ind <= end {
             // build lhs
             if matches!(self.token_list[ind].t_type, TokenType::Make) {
-                ind += 1; // FIXME: should this also skip `EndBlock`s?
+                ind += 1;
             }
 
             let mut start_lhs = ind;
