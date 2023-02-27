@@ -217,7 +217,7 @@ impl EvalNode for ASTOpNode {
                 }
                 return right_node;
             } else if let Some(Value::Integer(_)) = left_node {
-                return left_node.unwrap();
+                return left_node.unwrap();  // not sure why clippy thinks this is in the block above
             } else {
                 panic!(
                     "[EVAL] Expected `Identifier`. Found `{:?}`, self = {:#?}",
