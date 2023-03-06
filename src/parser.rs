@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::{
     astnode::{ASTBlockNode, ASTIdentifierNode, ASTNodes, ASTOpNode, ASTValNode},
     tokens::{Operator, Token, TokenType, Value},
@@ -7,14 +5,12 @@ use crate::{
 
 pub struct Parser {
     pub token_list: Vec<Token>,
-    pub map: HashMap<String, Value>,
 }
 
 impl Parser {
     pub fn new(t_list: &[Token]) -> Self {
         Self {
             token_list: t_list.to_vec(),
-            map: HashMap::new(),
         }
     }
 
