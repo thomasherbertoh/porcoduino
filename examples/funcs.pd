@@ -1,0 +1,12 @@
+proc increment_x(x: Integer) => Integer {
+	x + 1
+}
+
+make a = increment_x(5);
+make b = increment_x(a);
+
+proc sum(x: Integer, y: Integer) => Integer {
+	x + y
+}
+
+make c = sum(a, b);
