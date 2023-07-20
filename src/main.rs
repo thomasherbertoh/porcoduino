@@ -20,9 +20,8 @@ fn main() {
     let mut lexer = Lexer::new(program);
     let tokens = lexer.lex();
 
-    /*
-    for token in tokens.clone() {
-        print!("{:?} ", token.t_type);
+    /* for (i, token) in tokens.clone().iter().enumerate() {
+        print!("{:?}: {:?} ", i, token.wordy.as_ref().unwrap());
         if matches!(
             token.t_type,
             TokenType::End | TokenType::StartBlock | TokenType::EndBlock

@@ -32,6 +32,14 @@ impl Lexer {
                             None,
                         ));
                         self.counter += 1;
+                    } else if self.curr_char() == '>' {
+                        tokens.push(Token::new(
+                            TokenType::Returns,
+                            depth,
+                            Some("returns".to_string()),
+                            None,
+                        ));
+                        self.counter += 1;
                     } else {
                         tokens.push(Token::new(
                             TokenType::Operator(Operator::Assignment),
@@ -228,6 +236,26 @@ impl Lexer {
                     ));
                     self.counter += 1;
                 }
+                ':' => {
+                    // next word will be type name
+                    tokens.push(Token::new(
+                        TokenType::HasType,
+                        depth,
+                        Some("has_type".to_string()),
+                        None,
+                    ));
+                    self.counter += 1;
+                }
+                ',' => {
+                    // separating list items
+                    tokens.push(Token::new(
+                        TokenType::ItemSeparator,
+                        depth,
+                        Some("item_separator".to_string()),
+                        None,
+                    ));
+                    self.counter += 1;
+                }
                 _ if c.is_alphabetic() => {
                     let mut buff = String::from(c);
                     self.counter += 1;
@@ -240,6 +268,11 @@ impl Lexer {
                         "make" => TokenType::Make,
                         "true" => TokenType::Value(Value::Boolean(true)),
                         "false" => TokenType::Value(Value::Boolean(false)),
+                        "proc" => TokenType::Proc,
+                        "String" => TokenType::ValType("String".to_owned()),
+                        "Char" => TokenType::ValType("Char".to_owned()),
+                        "Integer" => TokenType::ValType("Integer".to_owned()),
+                        "Boolean" => TokenType::ValType("Boolean".to_owned()),
                         _ => TokenType::Identifier(buff.clone()),
                     };
                     tokens.push(Token::new(token_type, depth, Some(buff), None));

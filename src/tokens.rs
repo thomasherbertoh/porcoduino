@@ -9,6 +9,11 @@ pub enum TokenType {
     StartBlock, // `StartBlock` always has the same `depth` attribute as its corresponding `EndBlock`
     EndBlock,
     End,
+    Proc,
+    ValType(String),
+    Returns,
+    HasType,
+    ItemSeparator,
 }
 
 #[derive(Clone, Debug, PartialEq)]
