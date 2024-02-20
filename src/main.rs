@@ -9,6 +9,8 @@ use lexer::Lexer;
 use parser::Parser;
 use std::{env, fs, time::Instant};
 
+use crate::tokens::TokenType;
+
 fn main() {
     let mut start = Instant::now();
 
@@ -20,26 +22,26 @@ fn main() {
     let mut lexer = Lexer::new(program);
     let tokens = lexer.lex();
 
-    /* for (i, token) in tokens.clone().iter().enumerate() {
+    /* for (i, token) in tokens.iter().enumerate() {
         print!("{:?}: {:?} ", i, token.wordy.as_ref().unwrap());
         if matches!(
             token.t_type,
             TokenType::End | TokenType::StartBlock | TokenType::EndBlock
         ) {
-            print!("\n");
+            println!();
         }
     }
+
+    println!("\n");
     */
 
     let parser = Parser::new(&tokens);
 
     let nodes = parser.parse(0, tokens.len() - 1);
 
-    /*
-    for node in nodes.clone() {
+    /* for node in nodes.clone() {
         println!("node = {:#?}", node);
-    }
-    */
+    } */
 
     println!("Compilation took {} seconds", start.elapsed().as_secs_f32());
 
@@ -58,7 +60,7 @@ fn main() {
         scope_vec.sort_by(|a, b| a.0.cmp(b.0));
         println!("Scope {}: {{", i);
         for variable in scope_vec {
-            println!("  {} = {:?}", variable.0, variable.1);
+            println!("\t{} = {:?}", variable.0, variable.1);
         }
         println!("}}");
     }
