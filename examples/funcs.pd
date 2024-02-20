@@ -10,3 +10,11 @@ proc sum(x: Integer, y: Integer) => Integer {
 }
 
 make c = sum(a, b);
+
+proc random(x: Integer) => Integer {
+	make b = x * 2;
+	make a = b + 6;
+	a - 2
+}
+
+make d = random(c);
