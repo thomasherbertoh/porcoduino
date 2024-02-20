@@ -1,13 +1,17 @@
 use std::collections::HashMap;
 
 use crate::{
-    astnode::{ASTBlockNode, ASTNodes, ASTOpNode, ASTValNode, EvalNode},
+    astnode::{
+        ASTBlockNode, ASTIdentifierNode, ASTNodes, ASTOpNode, ASTProcNode, ASTValNode, EvalNode,
+    },
     tokens::{Operator, Value},
+    TokenType::ValType,
 };
 
 #[derive(Clone, Debug)]
 pub struct Evaluator {
     evaluator_vars: Vec<HashMap<String, Value>>,
+    evaluator_procs: Vec<HashMap<String, ASTProcNode>>,
     nodes: Vec<ASTNodes>,
     last_ret: Option<Value>,
     ret_depth: Option<u64>, // depth the value `last_ret` was returned from
@@ -17,6 +21,7 @@ impl Evaluator {
     pub fn new(nodes: &[ASTNodes]) -> Self {
         Self {
             evaluator_vars: Vec::new(),
+            evaluator_procs: Vec::new(),
             nodes: nodes.to_vec(),
             last_ret: None,
             ret_depth: None,
@@ -28,7 +33,11 @@ impl Evaluator {
             match node {
                 ASTNodes::ASTOpNode(op_node) => op_node.eval_node(self),
                 ASTNodes::ASTBlockNode(block_node) => block_node.eval_node(self),
-                _ => panic!("[EVAL] Expected `Operator`. Found `{:?}`", node),
+                ASTNodes::ASTProcNode(proc_node) => proc_node.eval_node(self),
+                _ => panic!(
+                    "[EVAL] Expected `Operator`, `StartBlock`, `EndBlock`, or `Proc`. Found `{:?}`",
+                    node
+                ),
             };
         }
     }
@@ -37,12 +46,39 @@ impl Evaluator {
         self.evaluator_vars
     }
 
-    pub fn add_new_scope(&mut self) {
+    pub fn get_val(&self, ident_node: &ASTIdentifierNode) -> Value {
+        let mut search_depth = self.evaluator_vars.len() - 1;
+        loop {
+            let map = self.evaluator_vars.get(search_depth).unwrap();
+            if !map.contains_key(&ident_node.name) {
+                if search_depth == 0 {
+                    break; // -= 1 would cause error due to usize
+                }
+                search_depth -= 1;
+            } else {
+                return map.get(&ident_node.name).unwrap().clone();
+            }
+        }
+        panic!(
+            "[EVAL] Unable to find `Value` for `Identifier` {:?}",
+            ident_node.name
+        );
+    }
+
+    pub fn add_new_var_scope(&mut self) {
         self.evaluator_vars.push(HashMap::new());
     }
 
-    pub fn remove_old_scope(&mut self) {
+    pub fn remove_old_var_scope(&mut self) {
         self.evaluator_vars.remove(self.evaluator_vars.len() - 1);
+    }
+
+    pub fn add_new_proc_scope(&mut self) {
+        self.evaluator_procs.push(HashMap::new());
+    }
+
+    pub fn remove_old_proc_scope(&mut self) {
+        self.evaluator_procs.remove(self.evaluator_procs.len() - 1);
     }
 }
 
@@ -69,7 +105,7 @@ impl EvalNode for ASTOpNode {
                             loop {
                                 match evaluator
                                     .evaluator_vars
-                                    .get(depth as usize)
+                                    .get(depth.unwrap() as usize)
                                     .unwrap()
                                     .get(&ident.name)
                                 {
@@ -80,7 +116,7 @@ impl EvalNode for ASTOpNode {
                                     }
                                     None => {
                                         // error if run out of scopes to search for variable in
-                                        depth.checked_sub(1).unwrap_or_else(||
+                                        depth.unwrap().checked_sub(1).unwrap_or_else(||
                                             panic!(
                                                 "[EVAL] Unable to fetch value of identifier `{}`. Is it in scope?",
                                                 ident.name
@@ -115,7 +151,7 @@ impl EvalNode for ASTOpNode {
                 loop {
                     match evaluator
                         .evaluator_vars
-                        .get(depth as usize)
+                        .get(depth.unwrap() as usize)
                         .unwrap()
                         .get(&ident.name)
                     {
@@ -126,13 +162,13 @@ impl EvalNode for ASTOpNode {
                         }
                         None => {
                             // error if run out of scopes to search for variable in
-                            if depth == 0 {
+                            if depth.unwrap() == 0 {
                                 panic!(
                                     "[EVAL] Unable to fetch value of identifier `{}`. Is it in scope?",
                                     ident.name
                                 );
                             } else {
-                                depth -= 1;
+                                depth = Some(depth.unwrap() - 1);
                             }
                         }
                     }
@@ -140,6 +176,7 @@ impl EvalNode for ASTOpNode {
                 val.unwrap()
             }
             ASTNodes::ASTBlockNode(block) => block.eval_node(evaluator),
+            ASTNodes::ASTProcNode(proc) => proc.eval_node(evaluator),
             _ => panic!(
                 "[EVAL] eval_node() called on unevaluatable `{:?}`",
                 self.node.clone().right.unwrap()
@@ -152,13 +189,13 @@ impl EvalNode for ASTOpNode {
                 let depth = self.depth;
 
                 // create scopes that should now exist
-                while depth >= evaluator.evaluator_vars.len() as u64 {
-                    evaluator.add_new_scope();
+                while depth.unwrap() >= evaluator.evaluator_vars.len() as u64 {
+                    evaluator.add_new_var_scope();
                 }
 
                 // delete scopes that should no longer exist
-                while depth < (evaluator.evaluator_vars.len() as u64) - 1 {
-                    evaluator.remove_old_scope();
+                while depth.unwrap() < (evaluator.evaluator_vars.len() as u64) - 1 {
+                    evaluator.remove_old_var_scope();
                 }
 
                 let mut search_depth = depth;
@@ -166,7 +203,7 @@ impl EvalNode for ASTOpNode {
                 loop {
                     let curr_map_mut = evaluator
                         .evaluator_vars
-                        .get_mut(search_depth as usize)
+                        .get_mut(search_depth.unwrap() as usize)
                         .unwrap_or_else(|| {
                             panic!("[EVAL] variables disappeared for some reason lol")
                         });
@@ -187,7 +224,7 @@ impl EvalNode for ASTOpNode {
                                 ident.name,
                                 curr_map.get(&ident.name).unwrap(),
                                 right_node,
-                                self, 
+                                self,
                             );
                         } else if right_node.get_type()
                             != curr_map.get(&ident.name).unwrap().get_type()
@@ -196,7 +233,7 @@ impl EvalNode for ASTOpNode {
                             panic!("[EVAL] Invalid operation: assigning value of type `{}`({:?}) to variable of type `{}`({})",
                                     right_node.get_type(),
                                     right_node,
-                                    evaluator.evaluator_vars.get((ident.depth) as usize).unwrap().get(&ident.name).unwrap().get_type(),
+                                    evaluator.evaluator_vars.get((ident.depth.unwrap()) as usize).unwrap().get(&ident.name).unwrap().get_type(),
                                     ident.name
                         );
                         } else {
@@ -205,19 +242,19 @@ impl EvalNode for ASTOpNode {
                             break; // successful redefinition
                         }
                     } else {
-                        search_depth = search_depth.checked_sub(1).unwrap_or_else(|| panic!(
-                            "[EVAL] Unable to fetch value of identifier `{}`. Is it in scope? Current depth: {}, vars: {:?}",
+                        search_depth = Some(search_depth.unwrap().checked_sub(1).unwrap_or_else(|| panic!(
+                            "[EVAL] Unable to fetch value of identifier `{}`. Is it in scope? Current depth: {:?}, vars: {:?}",
                             ident.name, depth, evaluator.evaluator_vars
-                        ));
+                        )));
                     }
                 }
                 if to_ret {
                     evaluator.last_ret = Some(right_node.clone());
-                    evaluator.ret_depth = Some(depth);
+                    evaluator.ret_depth = depth;
                 }
                 return right_node;
             } else if let Some(Value::Integer(_)) = left_node {
-                return left_node.unwrap();  // not sure why clippy thinks this is in the block above
+                return left_node.unwrap(); // not sure why clippy thinks this is in the block above
             } else {
                 panic!(
                     "[EVAL] Expected `Identifier`. Found `{:?}`, self = {:#?}",
@@ -475,7 +512,7 @@ impl EvalNode for ASTOpNode {
         };
         if to_ret {
             evaluator.last_ret = Some(res.clone());
-            evaluator.ret_depth = Some(self.depth); // takes depth of the `ASTOpNode`
+            evaluator.ret_depth = self.depth; // takes depth of the `ASTOpNode`
         }
         res
     }
@@ -499,5 +536,138 @@ impl EvalNode for ASTBlockNode {
             };
         }
         out.unwrap()
+    }
+}
+
+impl EvalNode for ASTProcNode {
+    fn eval_node(&self, evaluator: &mut Evaluator) -> Value {
+        if self.is_declaration {
+            let depth = self.depth;
+
+            // create scopes that should now exist
+            while depth.unwrap() >= evaluator.evaluator_procs.len() as u64 {
+                evaluator.add_new_proc_scope();
+            }
+
+            // remove scopes that should no longer exist
+            while depth.unwrap() < (evaluator.evaluator_procs.len() as u64) - 1 {
+                evaluator.remove_old_proc_scope();
+            }
+
+            // get proc map
+            let map = evaluator
+                .evaluator_procs
+                .get_mut(depth.unwrap() as usize)
+                .unwrap_or_else(|| panic!("[EVAL] procedures disappeared for some reason lol"));
+
+            // insert proc
+            map.insert(self.name.clone(), self.clone());
+
+            Value::Integer(0)
+        } else {
+            // create var scope for proc
+            // proc scope = call scope + 1
+            let depth = self.depth.unwrap() + 1;
+            while depth >= evaluator.evaluator_vars.len() as u64 {
+                evaluator.add_new_var_scope();
+            }
+
+            let mut evaluator_clone = evaluator.clone();
+
+            // get proc scope map
+            let proc_var_map = evaluator
+                .evaluator_vars
+                .get_mut(depth as usize)
+                .unwrap_or_else(|| panic!("[EVAL] error getting proc scope at depth {:?}", depth));
+
+            // get map entry of proc
+            let proc;
+            let mut search_depth = self.depth.unwrap();
+            loop {
+                let curr_map = evaluator
+                    .evaluator_procs
+                    .get(search_depth as usize)
+                    .unwrap();
+
+                if !curr_map.contains_key(&self.name) {
+                    if search_depth == 0 {
+                        panic!("[EVAL] unable to find proc {:?}", self.name);
+                    }
+
+                    search_depth -= 1;
+                } else {
+                    proc = curr_map.get(&self.name).unwrap();
+                    break;
+                }
+            }
+
+            // copy args into params of proc (using var scope of proc)
+            for (i, param) in proc.params.iter().enumerate() {
+                proc_var_map.insert(param.name.clone(), {
+                    let val = match self.args.get(i).unwrap() {
+                        // this can only search before proc scope
+                        ASTNodes::ASTIdentifierNode(ident_node) => {
+                            evaluator_clone.get_val(ident_node)
+                        }
+                        ASTNodes::ASTOpNode(op_node) => op_node.eval_node(&mut evaluator_clone),
+                        ASTNodes::ASTValNode(val_node) => val_node.val.clone(),
+                        ASTNodes::ASTBlockNode(block_node) => {
+                            block_node.eval_node(&mut evaluator_clone)
+                        }
+                        _ => panic!(
+                            "[EVAL] eval_node() called on unevaluatable `{:?}`",
+                            self.args.get(i).unwrap()
+                        ),
+                    };
+
+                    // check type of arg matches type of param
+                    if val.get_type()
+                        != match param.param_type.clone() {
+                            ValType(s) => s,
+                            _ => String::new(),
+                        }
+                    {
+                        panic!(
+                            "[EVAL] Type of argument {:?} does not match type of parameter {:?}",
+                            self.args.get(i).unwrap(),
+                            param,
+                        );
+                    }
+
+                    val
+                });
+            }
+
+            let proc_ret_type = proc.ret_type.clone().unwrap();
+            let proc_name = proc.name.clone();
+
+            // evaluate block
+            let block_val = match proc.body.clone().unwrap() {
+                ASTNodes::ASTBlockNode(block_node) => block_node.eval_node(evaluator),
+                _ => panic!(
+                    "[EVAL] Expected an `ASTBlockNode`, found an `{:?}`",
+                    proc.body.clone().unwrap()
+                ),
+            };
+
+            // check return type of proc
+            let tmp = &String::new();
+            if &block_val.get_type()
+                != match &proc_ret_type {
+                    ValType(s) => s,
+                    _ => tmp,
+                }
+            {
+                panic!("[EVAL] Returned value `{:?}` doesn't match the expected return type `{:?}` of the procedure `{:?}`",
+                    block_val,
+                    proc_ret_type,
+                    proc_name);
+            }
+
+            // decide whether or not to return value
+            //delete proc scope
+
+            block_val
+        }
     }
 }
