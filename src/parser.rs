@@ -1,5 +1,7 @@
 use crate::{
-    astnode::{ASTBlockNode, ASTIdentifierNode, ASTNodes, ASTOpNode, ASTValNode},
+    astnode::{
+        ASTBlockNode, ASTIdentifierNode, ASTNodes, ASTOpNode, ASTParamNode, ASTProcNode, ASTValNode,
+    },
     tokens::{Operator, Token, TokenType, Value},
 };
 
@@ -23,21 +25,22 @@ impl Parser {
             TokenType::Identifier(name) => {
                 Some(ASTNodes::ASTIdentifierNode(ASTIdentifierNode::new(
                     name.to_string(),
-                    token.code_depth,
-                    prev.is_some() && prev.unwrap().t_type == TokenType::Make,
+                    Some(token.code_depth),
+                    prev.is_some()
+                        && matches!(prev.unwrap().t_type, TokenType::Make | TokenType::Proc),
                     next.is_some() && next.unwrap().t_type == TokenType::EndBlock,
                 )))
             }
             TokenType::Value(v) => Some(ASTNodes::ASTValNode(ASTValNode::new(
                 v.clone(),
-                token.code_depth,
+                Some(token.code_depth),
                 next.is_some() && next.unwrap().t_type == TokenType::EndBlock,
             ))),
             TokenType::Operator(op) => Some(ASTNodes::ASTOpNode(ASTOpNode::new(
                 Box::new(None),
                 Box::new(None),
                 op.clone(),
-                token.code_depth,
+                Some(token.code_depth),
             ))),
             _ => None,
         }
@@ -62,6 +65,117 @@ impl Parser {
         );
     }
 
+    fn build_arg_list(&self, start: usize, end: usize) -> Vec<ASTNodes> {
+        let mut out = Vec::new();
+        let mut rbracket_index = self.find_rbracket_index(start, end);
+        let rbracket = self.token_list.get(rbracket_index).unwrap();
+        if !matches!(rbracket.t_type, TokenType::RBracket) {
+            rbracket_index = end;
+        }
+        for i in start + 1..rbracket_index {
+            let curr = self.token_list.get(i).unwrap();
+            if curr.t_type == TokenType::ItemSeparator {
+                continue;
+            }
+
+            match curr.t_type {
+                TokenType::Identifier(_) | TokenType::Value(_) => out.push(
+                    Parser::astnode_from_token(
+                        curr,
+                        self.token_list.get(i - 1),
+                        self.token_list.get(i + 1),
+                    )
+                    .unwrap(),
+                ),
+                _ => break,
+            };
+        }
+
+        out
+    }
+
+    fn build_param_list(&self, start: usize, end: usize) -> Vec<ASTParamNode> {
+        let mut out = Vec::new();
+        let mut rbracket_index = self.find_rbracket_index(start, end);
+        let rbracket = self.token_list.get(rbracket_index).unwrap();
+        if !matches!(rbracket.t_type, TokenType::RBracket) {
+            rbracket_index = end;
+            // panic!("[PARSE] Expected ')' but found {:?} instead.", rbracket);
+        }
+
+        let mut ind = start + 1; // skip lbracket
+        while ind < rbracket_index {
+            let ident_token = self.token_list.get(ind).unwrap();
+            let name = match &ident_token.t_type {
+                TokenType::Identifier(ident_name) => ident_name,
+                _ => panic!(
+                    "[PARSE] Expected `Identifier`, got {:?}",
+                    ident_token.t_type
+                ),
+            };
+
+            ind += 2; // skip `HasType` token
+            let param_type = &self.token_list.get(ind).unwrap().t_type;
+            if !matches!(param_type, TokenType::ValType(_)) {
+                panic!("[PARSE] Expected `ValType`, got {:?}", param_type);
+            }
+            out.push(ASTParamNode::new(name.to_string(), param_type.clone()));
+            ind += 2; // try to point to name of next param, skipping `ItemSeparator` token
+        }
+        out
+    }
+
+    fn build_proc_decl_node(&self, start: usize, end: usize) -> ASTProcNode {
+        let mut ind = start + 1; // start from proc name
+
+        let name = match &self.token_list[ind].t_type {
+            TokenType::Identifier(name) => name,
+            _ => panic!(
+                "[PARSE] expected an identifier, found {:?}",
+                self.token_list[ind].t_type
+            ),
+        };
+
+        let depth = self.token_list[ind].code_depth;
+
+        ind += 1; // jump to lbracket
+
+        let params = self.build_param_list(ind, end);
+
+        ind += 2 + (3 * params.len()); // attempt to jump to end of params
+        while !matches!(
+            self.token_list[ind].t_type,
+            TokenType::Returns | TokenType::StartBlock
+        ) {
+            ind += 1; // do the rest
+        }
+
+        let mut ret_type = None;
+
+        if self.token_list[ind].t_type == TokenType::Returns {
+            // returns is the arrow; jump ahead to return type
+            ind += 1;
+            ret_type = Some(self.token_list[ind].t_type.clone());
+            ind += 1; // jump to startblock token
+        }
+
+        let body = if self.token_list[ind].t_type == TokenType::StartBlock {
+            Box::new(Some(self.parse(ind, end)[0].clone())) //FIXME: this is gross
+        } else {
+            panic!("[PARSE] Proc declaration has no body?");
+        };
+
+        ASTProcNode {
+            name: name.to_string(),
+            body,
+            depth: Some(depth),
+            is_declaration: true,
+            params,
+            args: Vec::new(),
+            ret_type,
+        }
+    }
+
     fn build_brackets(&self, start: usize, end: usize) -> ASTNodes {
         let ind = self.find_rbracket_index(start, end);
         let rbracket = self.token_list.get(ind).unwrap().clone();
@@ -72,11 +186,30 @@ impl Parser {
     }
 
     fn find_end_of_block_index(&self, start: usize, end: usize) -> usize {
-        let start_depth = self.token_list.get(start).unwrap().code_depth;
-        let mut ind = start + 1;
-        while ind <= end && self.token_list.get(ind).unwrap().code_depth >= start_depth {
-            ind += 1;
+        let mut ind = start;
+
+        if self.token_list.get(start).unwrap().t_type == TokenType::StartBlock {
+            // find index of corresponding `EndBlock`
+            let mut bracket_count = 0;
+            while ind <= end {
+                bracket_count += match self.token_list.get(ind).unwrap().t_type {
+                    TokenType::StartBlock => 1,
+                    TokenType::EndBlock => -1,
+                    _ => 0,
+                };
+                if bracket_count == 0 {
+                    return ind;
+                }
+                ind += 1;
+            }
+        } else {
+            let start_depth = self.token_list.get(start).unwrap().code_depth;
+            ind = start + 1;
+            while ind <= end && self.token_list.get(ind).unwrap().code_depth >= start_depth {
+                ind += 1;
+            }
         }
+
         // don't go out of range
         if ind > end {
             end
@@ -96,11 +229,11 @@ impl Parser {
                 .unwrap_or_else(|| panic!("[PARSE] Error on token {:?}", self.token_list[start])),
                 TokenType::End | TokenType::EndBlock => ASTNodes::ASTValNode(ASTValNode::new(
                     Value::Integer(0),
-                    self.token_list[start].code_depth,
+                    Some(self.token_list[start].code_depth),
                     false,
                 )),
                 _ => panic!(
-                    "[PARSE] Expected `Identifier` or `Value`. Found `{:?}` at index {}",
+                    "[PARSE] Expected `Identifier`,`Value`, `End`, or `EndBlock`. Found `{:?}` at index {}",
                     self.token_list[start], start
                 ),
             };
@@ -210,7 +343,7 @@ impl Parser {
         }
 
         let op = match &self.token_list.get(start + op_offset).unwrap().t_type {
-            TokenType::Operator(o) => o,
+            TokenType::Operator(o) => Some(o),
             TokenType::End => return lhs.unwrap(),
             TokenType::EndBlock => {
                 return match lhs.unwrap() {
@@ -227,18 +360,92 @@ impl Parser {
                     _ => todo!(),
                 };
             }
+            TokenType::LBracket => None, // start of param list, no operator
+            TokenType::StartBlock => {
+                // skip over this block; it's already part of an `ASTProcNode`
+                let end_block = self.find_end_of_block_index(start + op_offset, end);
+                op_offset = end_block - start-1;
+                None
+            }, // start of block of function we've already parsed
+            TokenType::HasType => {
+                None
+            },  // param in function declaration
             _ => panic!(
-                "[PARSE] Expected `Operator`, end of statement, or end of block. Found `{:?}` at index `{}`",
-                self.token_list[start + op_offset], start + op_offset,
+                "[PARSE] Expected `Operator`, end of statement, or end of block. Found `{:?}` at index `{}`. lhs = {:?}",
+                self.token_list[start + op_offset], start + op_offset, lhs,
             ),
         };
 
-        ASTNodes::ASTOpNode(ASTOpNode::new(
-            Box::new(lhs),
-            Box::new(Some(self.build_tree(start + op_offset + 1, end))),
-            op.clone(),
-            self.token_list.get(start).unwrap().code_depth,
-        ))
+        if let Some(op) = op {
+            ASTNodes::ASTOpNode(ASTOpNode::new(
+                Box::new(lhs),
+                Box::new(Some(self.build_tree(start + op_offset + 1, end))),
+                op.clone(),
+                Some(self.token_list.get(start).unwrap().code_depth),
+            ))
+        } else {
+            if self.token_list.get(start + op_offset).unwrap().t_type == TokenType::EndBlock {
+                // this block is already part of an `ASTProcNode`, so we do this to skip over it
+                return ASTNodes::ASTBlockNode(ASTBlockNode::new(Vec::new(), start + op_offset));
+            }
+
+            // build param list
+            let start_param_list = start + op_offset;
+            let mut param_list = None;
+            let mut arg_list = None;
+            if let Some(ASTNodes::ASTIdentifierNode(ident)) = lhs.clone() {
+                if !ident.is_declaration
+                    && self.token_list.get(start_param_list).unwrap().t_type == TokenType::LBracket
+                {
+                    // proc call
+                    arg_list = Some(self.build_arg_list(start_param_list, end));
+                } else {
+                    param_list = Some(self.build_param_list(start_param_list, end));
+                }
+            }
+
+            // read return type of procedure
+            let mut ret_type = None;
+            if self.token_list.get(end + 1).unwrap().t_type == TokenType::Returns {
+                ret_type = Some(self.token_list.get(end + 2).unwrap().t_type.clone());
+            }
+
+            let mut start_of_body = start + op_offset;
+            while self.token_list.get(start_of_body).unwrap().t_type != TokenType::StartBlock
+                && start_of_body <= end
+            {
+                start_of_body += 1;
+            }
+            let end_of_body = self.find_end_of_block_index(start_of_body, end);
+
+            let body = ASTNodes::ASTBlockNode(ASTBlockNode::new(
+                self.parse(start_of_body, end_of_body),
+                start,
+            ));
+
+            ASTNodes::ASTProcNode(ASTProcNode::new(
+                if let Some(lhs_node) = lhs.clone() {
+                    match lhs_node {
+                        ASTNodes::ASTIdentifierNode(ident) => ident.name,
+                        _ => panic!(
+                            "[PARSE] Expected `Identifier`, got {:?} at index {}",
+                            lhs_node, start
+                        ),
+                    }
+                } else {
+                    panic!("[PARSE] Invalid lhs at index {start}");
+                },
+                Box::new(Some(body)),
+                Some(self.token_list.get(start).unwrap().code_depth),
+                match lhs.clone() {
+                    Some(ASTNodes::ASTIdentifierNode(ident)) => ident.is_declaration,
+                    _ => panic!("[PARSE] expected `ASTIdentifierNode`, found {:?}", lhs),
+                },
+                param_list.unwrap_or_default(),
+                arg_list.unwrap_or_default(),
+                ret_type,
+            ))
+        }
     }
 
     pub fn parse(&self, start: usize, end: usize) -> Vec<ASTNodes> {
@@ -248,6 +455,22 @@ impl Parser {
 
         while ind < self.token_list.len() && ind <= end {
             // build lhs
+
+            if self.token_list[ind].t_type == TokenType::Proc {
+                // build proc declaration
+
+                let mut i = ind;
+                while self.token_list[i].t_type != TokenType::StartBlock {
+                    i += 1;
+                }
+                let end_of_proc = self.find_end_of_block_index(i, end);
+                nodes.push(ASTNodes::ASTProcNode(
+                    self.build_proc_decl_node(ind, end_of_proc),
+                ));
+                ind = end_of_proc + 1; // skip `EndBlock`
+                continue; // procs don't have rhs
+            }
+
             if matches!(self.token_list[ind].t_type, TokenType::Make) {
                 ind += 1;
             }
@@ -279,6 +502,7 @@ impl Parser {
                         TokenType::End
                             | TokenType::EndBlock
                             | TokenType::Operator(Operator::Assignment)
+                            | TokenType::Returns
                     ) {
                         break;
                     }
@@ -330,7 +554,7 @@ impl Parser {
                         build_rhs, open_ind,
                     )));
                 } else {
-                    let end_block_ind = self.find_end_of_block_index(start_rhs, end);
+                    let end_block_ind = self.find_end_of_block_index(start_rhs, end); // rhs could be block
                     while ind < end_block_ind && self.token_list[ind].t_type != TokenType::End {
                         end_rhs = ind;
                         ind += 1;
@@ -348,7 +572,7 @@ impl Parser {
                     Box::new(Some(lhs)),
                     Box::new(rhs),
                     Operator::Assignment,
-                    self.token_list[start_lhs].code_depth,
+                    Some(self.token_list[start_lhs].code_depth),
                 )));
             }
         }
